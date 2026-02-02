@@ -1,35 +1,101 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-AI SEMANTIC ANALYZER v6.1.1 - MODUL 3: ADVANCED ANALYSIS & DEDUPLICATION
+AI SEMANTIC ANALYZER v6.2.0 - MODUL 3: ADVANCED ANALYSIS & VISUALIZATION
 ═══════════════════════════════════════════════════════════════════════════════
 
-CHANGELOG v6.1.1 (Ian 2026):
-    - DEDUP: propagă reference_strength (representative) + confidence_score/reasons în output
-    - DEDUP: calculează avg_confidence_score și include source (representative) + sources_files
+Advanced statistical analysis, semantic deduplication, sentiment analysis, and
+interactive visualizations for AI Semantic Analyzer v6.2.
+
+MAJOR UPDATE v6.2.0 (February 2026):
+    🆕 DUAL TAXONOMY ANALYTICS
+        - Cross-dimensional analysis (Applications × Technologies)
+        - 16-category distribution analysis
+        - Technology-application correlation matrices
+        - Vendor transparency analysis
+    
+    📊 ENHANCED VISUALIZATIONS
+        - Technology adoption heatmaps
+        - Application-technology Sankey diagrams
+        - Vendor mention tracking charts
+        - Expanded temporal trend analysis (2020-2025)
+    
+    🎯 IMPROVED METRICS
+        - AI Adoption Index adjusted for 16 categories
+        - Category diversity scores
+        - Technology maturity indicators
+        - Vendor disclosure transparency metrics
+
+COMPONENTS:
+    1. Statistical Analysis
+       - Company-level AI adoption metrics
+       - Year-over-year trend analysis
+       - Sector benchmarking
+       - Category distribution analysis
+       - AI Adoption Index calculation
+    
+    2. Semantic Deduplication
+       - SentenceTransformer embeddings
+       - Cosine similarity clustering
+       - Configurable threshold (default: 0.85)
+       - Smart merging: preserve highest confidence
+       - Duplicate tracking and logging
+    
+    3. Sentiment Analysis
+       - FinBERT-based sentiment scoring
+       - Context-aware classification
+       - Batch processing with progress bars
+       - Fallback to TextBlob if FinBERT unavailable
+    
+    4. Interactive Visualizations (Plotly)
+       - Temporal trends (line charts)
+       - Category distributions (bar charts, treemaps)
+       - Company comparisons (grouped bars)
+       - Sector analysis (box plots, violin plots)
+       - Technology heatmaps (NEW v6.2)
+       - Vendor analysis (NEW v6.2)
+       - All charts exportable as HTML
+
+WORKFLOW:
+    Raw Data → Statistical Analysis → Deduplication → Sentiment Analysis
+    → Visualization Generation → Export Results
+
+NEW IN v6.2:
+    ✅ Dual taxonomy analysis (16 categories)
+    ✅ Technology-application cross-analysis
+    ✅ Vendor transparency metrics
+    ✅ Enhanced category diversity scores
+    ✅ Technology maturity tracking
+    ✅ Application-technology correlation
+
+CHANGELOG v6.2.0 (Feb 2026):
+    - Dual taxonomy analytics (Applications + Technologies)
+    - 16-category distribution analysis
+    - Technology adoption heatmaps
+    - Vendor transparency analysis
+    - Enhanced AI Adoption Index for 16 categories
+    - Application-technology correlation matrices
+
+CHANGELOG v6.1.1 (Jan 2026):
+    - Export compatibility for strength/confidence scores
+    - Enhanced deduplication with confidence preservation
     - Version bump 6.1.1
 
-CHANGELOG v6.1.0 (Ianuarie 2026):
-    - FP handling: referințe cu reference_strength='mention_only' sunt excluse din AI Adoption Index
-    - Deduplicare: representative selection ia în calcul confidence_score
-    - Compat: dacă strength/confidence lipsesc, sunt extrase din detection_method (strength=..., conf=...)
+CHANGELOG v6.1.0 (Jan 2026):
+    - AI Adoption Index: exclude mention_only from calculations
+    - Enhanced confidence scoring in deduplication
+    - Improved semantic similarity thresholds
 
-CHANGELOG V6.0.6
-    - Adaugare sector si tara
+TECHNICAL NOTES:
+    - Deduplication threshold: 0.85 (cosine similarity)
+    - FinBERT model: ProsusAI/finbert
+    - Semantic model: all-MiniLM-L6-v2 (shared with module2)
+    - Memory efficient: Batch processing for large datasets
+    - Thread-safe: SemanticModelLoader singleton
 
-CHANGELOG v6.0.5:
-    - FIX: Corectat număr categorii în _calculate_diversity (17 → 13)
-    - Folosește len(AI_CATEGORIES) pentru calcul dinamic
-    - MATURITY_PATTERNS cu GenAI în toate stadiile
-    - FUTURE_PATTERNS cu timelines 2025-2028
-    - COMMITMENT_PATTERNS cu 'genai_specific' (weight 1.8)
-    - ImprovedSentimentAnalyzer pentru governance context
-    - MAX_POSSIBLE_SCORE: 12.0
-
-CHANGELOG v6.0:
-    - MATURITY_PATTERNS cu GenAI în toate stadiile
-    - FUTURE_PATTERNS cu timelines 2025-2028
-    - COMMITMENT_PATTERNS cu 'genai_specific' (weight 1.8)
-    - ImprovedSentimentAnalyzer pentru governance context
+Author: TeRa0
+Version: 6.2.0
+Date: February 2026
+Part of: AI Semantic Analyzer
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -45,15 +111,15 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer, util
 
-from ai_analyzer_v6_1_module1 import (
+from ai_analyzer_v6_2_module1 import (
     logger, AnalyzerConfig, AIReference, DocumentResult, 
     AIAdoptionIndex, AI_CATEGORIES, FINBERT_AVAILABLE
 )
-from ai_analyzer_v6_1_module2 import SemanticModelLoader
+from ai_analyzer_v6_2_module2 import SemanticModelLoader
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# HELPERS - Strength/Confidence parsing (v6.1.0)
+# HELPERS - Strength/Confidence parsing (v6.2, from v6.1.0)
 # ═══════════════════════════════════════════════════════════════════════════
 _strength_re = re.compile(r'(?:^|\|)strength=([^|]+)')
 _conf_re = re.compile(r'(?:^|\|)conf=([0-9]*\.?[0-9]+)')
@@ -550,7 +616,7 @@ class AIAdoptionIndexCalculatorV6:
     
     def calculate_index(self, doc_result: DocumentResult) -> AIAdoptionIndex:
         refs_all = doc_result.references
-        # v6.1.0: Exclude mention_only from index calculations (kept for audit)
+        # v6.2 (from v6.1.0): Exclude mention_only from index calculations (kept for audit)
         refs = [r for r in refs_all if not _is_mention_only(r)]
         
         if not refs:
@@ -581,7 +647,7 @@ class AIAdoptionIndexCalculatorV6:
         
         categories_used = len(set(ref.category for ref in refs))
         
-        logger.info(f"AI Index v6.1.0: {doc_result.company} ({doc_result.year}) = {final_index:.1f}")
+        logger.info(f"AI Index v6.2 (Dual Taxonomy): {doc_result.company} ({doc_result.year}) = {final_index:.1f}")
         
         return AIAdoptionIndex(
             company=doc_result.company, year=doc_result.year,

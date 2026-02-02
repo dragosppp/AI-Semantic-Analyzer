@@ -1,12 +1,30 @@
-# AI Semantic Analyzer v6.1
+# AI Semantic Analyzer
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python 3.9+">
-  <img src="https://img.shields.io/badge/Version-6.1.1-green.svg" alt="Version 6.1.1">
+  <img src="https://img.shields.io/badge/Version-6.2.0-green.svg" alt="Version 6.2.0">
   <img src="https://img.shields.io/badge/License-Academic-orange.svg" alt="Academic License">
 </p>
 
-An advanced semantic analysis system designed for doctoral research to identify and quantify AI adoption patterns in Fortune 500 company annual reports (2020-2025).
+**NLP-powered semantic analysis system for quantifying AI adoption in Fortune 500 annual reports (2020-2025)**
+
+---
+
+## 🚀 Latest Release: v6.2.0 (February 2026)
+
+### Major Update: Dual Taxonomy Implementation
+
+**What's New:**
+- ✅ **Dual Taxonomy Framework**: 8 AI Applications + 8 AI Technologies (16 categories total)
+- ✅ **Enhanced Detection**: 413 keywords (+176%), 99 patterns (+120%)
+- ✅ **Vendor Tracking**: Detects 25+ AI vendors (ChatGPT, Claude, Gemini, AWS, Azure, etc.)
+- ✅ **Improved Safety**: Removed risky keywords, enhanced false positive filtering
+- ✅ **Confidence Scoring**: Keyword tiers (high/medium/low confidence)
+- ✅ **Backward Compatible**: Full mapping from v6.1 categories
+
+📖 [v6.2 Documentation](v6.2/README.md) | 📖 [Migration Guide](docs/MIGRATION_v6.1_to_v6.2.md) | 📊 [Taxonomy Comparison](docs/taxonomy_comparison.md)
+
+---
 
 ## 🎯 Overview
 
@@ -16,37 +34,162 @@ AI Semantic Analyzer is a comprehensive NLP-powered tool that extracts, categori
 
 ---
 
+## 🗂️ Versions
+
+| Version | Status | Location | Description |
+|---------|--------|----------|-------------|
+| **v6.2.0** | ⭐ **Current** | [v6.2/](v6.2/) | Dual taxonomy (16 categories), 413 keywords, vendor tracking |
+| v6.1.0 | Legacy | [v6.1/](v6.1/) | Mixed taxonomy (13 categories), 150 keywords |
+
+**Using v6.1?** It remains fully supported. See [v6.1/README.md](v6.1/README.md) for documentation.
+
+---
+
+## 📦 Quick Start
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/SerbanGalani/AI-Semantic-Analyzer.git
+cd AI-Semantic-Analyzer
+
+# Install dependencies
+pip install pandas numpy pdfplumber PyMuPDF sentence-transformers openpyxl plotly tqdm textblob scikit-learn
+
+# Optional: FinBERT for sentiment analysis
+pip install transformers torch
+```
+
+### Run v6.2 (Recommended)
+
+```bash
+cd v6.2
+python ai_analyzer_v6_2_main.py
+```
+
+On first run, configure:
+1. Path to PDF folder
+2. Path to Fortune 500 CSV (optional)
+3. Output folder (default: `Results_v6/`)
+
+---
+
+## 📊 v6.2 Dual Taxonomy
+
+### Dimension 1: AI Applications (8 categories)
+
+What companies **use AI for**:
+
+| Code | Category | Description |
+|------|----------|-------------|
+| **A1** | Product & Service Innovation | AI-enhanced products, R&D acceleration |
+| **A2** | Operational Excellence & Automation | Process automation, supply chain optimization |
+| **A3** | Customer Experience & Engagement | Chatbots, personalization, marketing |
+| **A4** | Risk Management & Compliance | Fraud detection, cybersecurity, regulatory compliance |
+| **A5** | Data Analytics & Business Intelligence | Predictive analytics, forecasting, insights |
+| **A6** | AI Strategy & Investment | Strategic initiatives, budget allocation, partnerships |
+| **A7** | AI Governance & Ethics | Responsible AI, bias mitigation, explainability |
+| **A8** | AI Talent & Workforce Development | Training, upskilling, hiring |
+
+### Dimension 2: AI Technologies (8 categories)
+
+What **AI technologies** companies deploy:
+
+| Code | Category | Description |
+|------|----------|-------------|
+| **B1** | Traditional Machine Learning | Supervised/unsupervised learning, ensemble methods |
+| **B2** | Deep Learning & Neural Networks | DNN, CNN, RNN, reinforcement learning |
+| **B3** | Natural Language Processing (Non-LLM) | Text classification, NER, sentiment analysis |
+| **B4** | Generative AI & Large Language Models | ChatGPT, Claude, Gemini, RAG, text/image generation |
+| **B5** | Computer Vision | Image recognition, object detection, video analytics |
+| **B6** | Robotics & Autonomous Systems | Autonomous vehicles, AI robotics, agentic AI |
+| **B7** | AI Infrastructure & Platforms | MLOps, cloud AI, GPU infrastructure, model deployment |
+| **B8** | AI (General/Unspecified) | Generic AI references without technical specificity |
+
+**Total: 16 categories** (vs 13 in v6.1)
+
+---
+
+## 🔍 Detection Methodology
+
+### Hybrid Detection Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DETECTION PIPELINE v6.2                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. PATTERN MATCHING (99 patterns)                             │
+│     └─> Mandatory AI context for generic terms                  │
+│     └─> Vendor-specific patterns (ChatGPT, Claude, AWS, etc.)   │
+│                                                                 │
+│  2. SEMANTIC ANALYSIS (SentenceTransformer)                     │
+│     └─> all-MiniLM-L6-v2 embeddings                            │
+│     └─> Cosine similarity: 0.60 (standard) / 0.68 (strict)     │
+│                                                                 │
+│  3. ENHANCED FALSE POSITIVE FILTERING                          │
+│     └─> 60+ exclusion patterns                                  │
+│     └─> ML/DL measurement unit detection                        │
+│     └─> Keyword tier-based confidence scoring                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### v6.2 Improvements
+
+**Removed risky keywords:**
+- ❌ Standalone "ML" (conflicts with "ML of water")
+- ❌ Standalone "research", "lab", "innovation" (too generic)
+- ❌ Standalone "agent", "workflow" (confused with non-AI)
+
+**Enhanced patterns:**
+- ✅ Mandatory AI context: `research.*(?:AI|ML)` vs just `research`
+- ✅ Better exclusions: `\bML\b(?!\s*(of|metric|tons?))` 
+- ✅ Vendor detection: `ChatGPT|Claude|Gemini|Copilot`
+
+**Confidence tiers:**
+- **Tier 1**: High confidence (AI-specific compounds: "machine learning", "ChatGPT")
+- **Tier 2**: Medium confidence (needs validation: "classification", "optimization")
+- **Tier 3**: Low confidence (supportive: "algorithm", "model training")
+
+---
+
 ## 📁 Project Structure
 
 ```
-ai_semantic_analyzer/
+AI-Semantic-Analyzer/
 │
-├── ai_analyzer_v6_1_main.py      # Entry point - run this file
-├── ai_analyzer_v6_1_menu.py      # Interactive menu system
-├── ai_analyzer_v6_1_module1.py   # Core configuration, data structures, database
-├── ai_analyzer_v6_1_module2.py   # PDF processing, AI detection, text extraction
-├── ai_analyzer_v6_1_module3.py   # Deduplication, sentiment analysis, index calculation
-├── ai_analyzer_v6_1_module4.py   # Export (Excel, JSON), visualization (Plotly)
+├── README.md                          # This file
 │
-├── analyzer_config_v6.json       # Auto-generated configuration file
-├── ai_analyzer_v6.log            # Runtime logs
+├── v6.2/                              # 🚀 CURRENT VERSION
+│   ├── README.md                      # v6.2 specific docs
+│   ├── ai_taxonomy_v7.py              # 🆕 External taxonomy module
+│   ├── ai_analyzer_v6_2_main.py       # Entry point
+│   ├── ai_analyzer_v6_2_menu.py       # Interactive menu
+│   ├── ai_analyzer_v6_2_module1.py    # Core & config
+│   ├── ai_analyzer_v6_2_module2.py    # Detection & extraction
+│   ├── ai_analyzer_v6_2_module3.py    # Analysis & deduplication
+│   └── ai_analyzer_v6_2_module4.py    # Export & visualization
 │
-├── Results_v6/                   # Default output folder
-│   ├── ai_analysis_v6.db         # SQLite database
-│   ├── ai_references_raw.xlsx    # Raw extracted references
-│   ├── ai_references_deduplicated.xlsx
-│   ├── ai_adoption_index.xlsx    # Final AI Adoption Index
-│   ├── results.json
-│   ├── report.txt
-│   └── charts/                   # Interactive Plotly visualizations
+├── v6.1/                              # 📦 LEGACY VERSION
+│   ├── README.md                      # v6.1 specific docs
+│   └── ai_analyzer_v6_1_*.py          # v6.1 modules
 │
-└── PDFs/                         # Your input folder (configurable)
-    └── {position}_{Company}_{Year}_{DocType}.pdf
+├── docs/                              # 📚 DOCUMENTATION
+│   ├── MIGRATION_v6.1_to_v6.2.md     # Upgrade guide
+│   └── taxonomy_comparison.md         # Detailed taxonomy comparison
+│
+└── Results_v6/                        # Output folder (auto-created)
+    ├── ai_analysis_v6.db              # SQLite database
+    ├── ai_references_raw.xlsx         # Raw extractions
+    ├── ai_references_deduplicated.xlsx
+    └── charts/                        # Plotly visualizations
 ```
 
 ### File Naming Convention
 
-PDF files **must** follow this naming pattern for proper parsing:
+PDF files **must** follow this pattern:
 
 ```
 {Position}. {Company Name} - {Year} - {Document Type}.pdf
@@ -54,236 +197,7 @@ PDF files **must** follow this naming pattern for proper parsing:
 
 **Examples:**
 - `1. Walmart - 2024 - Annual Report.pdf`
-- `38. Bank of America - 2024 - annual report.pdf`
-- `125. Microsoft - 2023 - Sustainability.pdf`
-
-**Supported Document Types:**
-- `Annual Report` / `10K`
-- `Sustainability` / `ESG` / `CSR`
-- `Proxy` / `DEF14A`
-- `Quarterly Report` / `10Q`
-
----
-
-## 🚀 Installation
-
-### Prerequisites
-
-- Python 3.9 or higher
-- 8GB+ RAM recommended (for transformer models)
-- GPU optional but recommended for faster processing
-
-### Required Dependencies
-
-```bash
-pip install pandas numpy pdfplumber PyMuPDF sentence-transformers openpyxl plotly tqdm textblob scikit-learn
-```
-
-### Optional Dependencies (Enhanced Features)
-
-```bash
-# FinBERT for financial sentiment analysis (89% accuracy)
-pip install transformers torch
-
-# OCR for corrupted/scanned PDFs
-pip install pytesseract Pillow
-# Also install Tesseract OCR: https://github.com/tesseract-ocr/tesseract
-
-# Word segmentation for concatenated text
-pip install wordsegment
-```
-
-### Quick Start
-
-```bash
-# Clone or download all module files to the same directory
-# Then run:
-python ai_analyzer_v6_1_main.py
-```
-
-On first run, you'll be prompted to configure:
-1. Path to PDF folder
-2. Path to Fortune 500 CSV (optional, for industry/sector mapping)
-3. Output folder (default: `Results_v6/`)
-
----
-
-## 🔍 Text Identification Methodology
-
-### Detection Pipeline
-
-The system uses a **hybrid detection approach** combining three methods:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DETECTION PIPELINE                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. PATTERN MATCHING (Fast, High Precision)                     │
-│     └─> 80+ regex patterns for AI terms                         │
-│     └─> Exact match for specific technologies                   │
-│                                                                 │
-│  2. SEMANTIC ANALYSIS (Deep Understanding)                      │
-│     └─> SentenceTransformer (all-MiniLM-L6-v2)                  │
-│     └─> Cosine similarity against 65+ canonical descriptions    │
-│     └─> Threshold: 0.60 (standard) / 0.68 (strict)              │
-│                                                                 │
-│  3. CONTEXT VALIDATION (False Positive Reduction)               │
-│     └─> 60+ false positive patterns                             │
-│     └─> Context validators for short terms (AI, ML, DL)         │
-│     └─> Robotics/RPA classification (traditional vs AI-powered) │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Pattern Matching Details
-
-The system recognizes **80+ AI-related patterns** across categories:
-
-| Category | Example Patterns |
-|----------|------------------|
-| Core AI/ML | `artificial intelligence`, `machine learning`, `deep learning`, `neural network` |
-| Generative AI (2023-2025) | `generative AI`, `GenAI`, `LLM`, `GPT-4`, `ChatGPT`, `Claude`, `Copilot` |
-| Agentic AI (2025) | `AI agent`, `agentic AI`, `autonomous system`, `multi-agent` |
-| RAG & Knowledge | `RAG`, `retrieval-augmented generation`, `vector database`, `embeddings` |
-| Infrastructure | `MLOps`, `LLMOps`, `AIOps`, `edge AI`, `model serving` |
-| AI Safety | `responsible AI`, `AI ethics`, `AI governance`, `explainable AI` |
-| Applications | `chatbot`, `virtual assistant`, `recommendation system`, `fraud detection` |
-
-### Semantic Analysis
-
-For paragraphs that don't match explicit patterns, semantic similarity is computed:
-
-1. **Encoding**: Each paragraph is encoded using `all-MiniLM-L6-v2` (384-dimensional embeddings)
-2. **Comparison**: Cosine similarity computed against 65+ canonical AI descriptions
-3. **Thresholds**:
-   - **0.60** - Standard threshold (when hard indicators or implementation evidence present)
-   - **0.68** - Strict threshold (semantic-only detection, no pattern confirmation)
-
-**Canonical Description Examples:**
-```python
-"Company is implementing machine learning models for predictive analytics"
-"Organization deploying large language models and generative AI solutions"
-"Enterprise adopting AI-powered automation and intelligent process optimization"
-```
-
-### False Positive Filtering
-
-The system employs **60+ false positive patterns** to exclude non-AI references:
-
-```python
-FALSE_POSITIVE_PATTERNS = [
-    # Generic business terms
-    r'\b(?:AI|ML)\s*(?:segment|division|unit)\b',          # "AI segment" as business unit
-    r'\bAl\b',                                              # Person name "Al"
-    r'\bML\s*(?:Bill|Act|Law)\b',                          # "ML Bill" (legislation)
-    
-    # Industry-specific false positives
-    r'\b(?:assembly|production)\s+(?:line|robot)\b',        # Traditional manufacturing
-    r'\bindustrial\s+robot(?:s|ics)?\b',                    # Non-AI robotics
-    r'\brobotic\s+process\s+automation\b(?!.*intelligent)', # Traditional RPA
-    
-    # Financial document noise
-    r'\bAI\s+(?:insurance|insurer)\b',                      # American International
-    r'\bfiscal\s+year\s+\d{4}.*AI\b',                       # False context
-]
-```
-
-### Robotics & RPA Classification
-
-The system distinguishes between traditional and AI-powered automation:
-
-| Classification | Triggers AI Detection | Example |
-|----------------|----------------------|---------|
-| `ai_robotics` | ✅ Yes | "AI-powered robotic arms", "ML-enhanced automation" |
-| `traditional_robotics` | ❌ No | "assembly line robots", "industrial automation" |
-| `intelligent_rpa` | ✅ Yes | "intelligent process automation", "cognitive RPA" |
-| `traditional_rpa` | ❌ No | "rule-based automation", "RPA bots" |
-
-### Context Validators
-
-For ambiguous short terms (AI, ML, DL), the system validates context:
-
-```python
-# Valid AI context indicators:
-- "powered by AI"
-- "AI-driven insights"
-- "implementing machine learning"
-- "deep learning models"
-
-# Invalid context (filtered out):
-- "AI segment reported revenue"  # Business unit
-- "ML requirements"              # Generic abbreviation
-- "DL deadline"                  # Non-AI meaning
-```
-
-### Confidence Scoring (v6.1+)
-
-Each reference receives a **confidence score** and **strength classification**:
-
-| Strength | Confidence | Criteria |
-|----------|------------|----------|
-| `strong` | 0.80+ | Hard indicator + high semantic score + implementation evidence |
-| `medium` | 0.50-0.79 | Pattern match + moderate semantic score |
-| `mention_only` | <0.50 | Weak signal, excluded from AI Adoption Index |
-
----
-
-## 📊 AI Adoption Index
-
-The **AI Adoption Index** is a composite score (0-100+) calculated from 7 weighted dimensions:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│               AI ADOPTION INDEX FORMULA                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  AI_Index = (                                                   │
-│      Intensity   × 0.20  +   # References per 100 pages         │
-│      Semantic    × 0.15  +   # Average semantic relevance       │
-│      Diversity   × 0.15  +   # Shannon entropy (13 categories)  │
-│      Sentiment   × 0.10  +   # Positive/negative tone           │
-│      Maturity    × 0.15  +   # Implementation stage             │
-│      Future      × 0.10  +   # Forward-looking statements       │
-│      Commitment  × 0.15      # Investment signals               │
-│  ) × 100                                                        │
-│                                                                 │
-│  Maximum Possible Score: ~12.0 (scaled to 100 = 1200 points)    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Dimension Definitions
-
-| Dimension | Formula | Description |
-|-----------|---------|-------------|
-| **Intensity** | `min(1.0, refs / pages × 10)` | AI reference density |
-| **Semantic** | `mean(scores > 0.60)` | Relevance quality |
-| **Diversity** | `entropy / log₂(13)` | Category breadth |
-| **Sentiment** | `(mean + 1) / 2` | Communication tone |
-| **Maturity** | Pattern detection | `exploring` → `experimenting` → `scaling` → `embedded` |
-| **Future** | Pattern detection | 2025-2028 roadmap mentions |
-| **Commitment** | Weighted patterns | Investment, hiring, GenAI-specific signals |
-
----
-
-## 🏢 AI Categories (13)
-
-| # | Category | Description |
-|---|----------|-------------|
-| 1 | `machine_learning` | ML, deep learning, neural networks |
-| 2 | `natural_language_processing` | NLP, text analysis, language models |
-| 3 | `computer_vision` | Image recognition, video analysis |
-| 4 | `generative_ai_llm` | GenAI, GPT, ChatGPT, LLMs, Claude |
-| 5 | `agentic_ai_systems` | AI agents, autonomous systems |
-| 6 | `ai_infrastructure_mlops` | MLOps, AIOps, AI platforms |
-| 7 | `predictive_analytics` | Forecasting, predictive modeling |
-| 8 | `automation_robotics` | AI-powered automation (not traditional RPA) |
-| 9 | `ai_applications` | Chatbots, virtual assistants, recommendations |
-| 10 | `ai_governance_ethics` | Responsible AI, ethics, compliance |
-| 11 | `ai_strategy_adoption` | AI transformation, digital strategy |
-| 12 | `recommendation_systems` | Personalization engines |
-| 13 | `data_ai_general` | General AI/data references |
+- `38. Microsoft - 2023 - 10K.pdf`
 
 ---
 
@@ -297,19 +211,19 @@ The **AI Adoption Index** is a composite score (0-100+) calculated from 7 weight
 | `ai_references_deduplicated.xlsx` | Semantically deduplicated references |
 | `ai_adoption_index.xlsx` | Company rankings with 7-dimension breakdown |
 
-**Excel Features:**
-- Rich text formatting (AI terms in **bold red**)
-- Summary sheets by Industry, Sector, Country
-- Separate sheet for `mention_only` candidates (v6.1+)
+**v6.2 Enhancements:**
+- 16-category distribution sheets
+- Technology adoption matrices
+- Vendor transparency analysis
 
 ### Interactive Visualizations (Plotly)
 
-- Company ranking charts by year
-- Timeline evolution charts
-- Radar charts (7 dimensions)
-- Heatmaps (companies × years)
-- Category distribution charts
-- Industry/Sector/Country comparisons
+- **Temporal Analysis**: AI references over time (2020-2025)
+- **Category Analysis**: 16-category distribution (Applications + Technologies)
+- **Technology Heatmaps**: Adoption patterns by technology type (NEW v6.2)
+- **Vendor Analysis**: Transparency tracking (NEW v6.2)
+- **Company Rankings**: Top adopters by year
+- **Sector Comparisons**: Industry benchmarking
 
 ### Database (SQLite)
 
@@ -317,85 +231,7 @@ Tables:
 - `ai_references_raw` - All extracted references
 - `ai_references_deduplicated` - Deduplicated references
 - `adoption_index` - Company-level AI Adoption Index
-- `adoption_index_industry` - Industry aggregations
 - `processed_documents` - Document tracking
-
----
-
-## 🖥️ Menu Structure
-
-```
-1. DATA EXTRACTION
-   1.1 Process ALL documents (new + re-analyze)
-   1.2 Process BATCH by positions
-   1.3 Process only NEW documents - all
-   1.4 Process only NEW documents - batch of N
-   1.5 Re-verify documents WITHOUT AI references
-   1.6 Re-process documents with CORRUPTED TEXT (OCR)
-
-2. ANALYSIS & DEDUPLICATION
-   2.1 Semantic deduplication
-   2.2 Analyze ALL
-   2.3 Analyze only NEW
-
-3. CALCULATE AI ADOPTION INDEX
-   3.1 Calculate BATCH
-   3.2 Calculate ALL
-   3.3 Calculate only NEW
-
-4. REPORTS
-   4.1 Export ai_references_raw.xlsx
-   4.2 Export ai_references_deduplicated.xlsx
-   4.3 Export ai_adoption_index.xlsx
-   4.4 Export results.json
-   4.5 Export report.txt
-   4.6 Export ALL reports
-
-5. CHARTS (Plotly Interactive)
-   5.1-5.7 Various visualizations
-   5.8 Charts by INDUSTRY
-   5.9 Charts by SECTOR/COUNTRY
-
-6. UTILITIES
-   6.1 Complete statistics
-   6.2 List processed documents
-   6.3 Verify database integrity
-   6.4 Backup database
-   6.5 Clean old data
-   6.6 Reconfigure paths
-
-7. COMPLETE PIPELINE
-   Automated end-to-end processing
-
-0. EXIT
-```
-
----
-
-## ⚙️ Configuration
-
-The system auto-generates `analyzer_config_v6.json`:
-
-```json
-{
-  "input_folder": "/path/to/PDFs",
-  "fortune500_csv": "/path/to/Fortune500.csv",
-  "output_folder": "Results_v6",
-  "semantic_threshold": 0.60,
-  "semantic_threshold_strict": 0.68,
-  "filter_traditional_robotics": true,
-  "filter_traditional_rpa": true,
-  "weights": {
-    "intensity": 0.20,
-    "semantic": 0.15,
-    "diversity": 0.15,
-    "sentiment": 0.10,
-    "maturity": 0.15,
-    "future": 0.10,
-    "commitment": 0.15
-  }
-}
-```
 
 ---
 
@@ -407,25 +243,39 @@ The system auto-generates `analyzer_config_v6.json`:
 |-----------|-------|---------|
 | Semantic Embedding | `all-MiniLM-L6-v2` | 384-dim sentence embeddings |
 | Sentiment Analysis | `FinBERT-tone` | Financial sentiment (pos/neg/neutral) |
-| OCR (optional) | Tesseract | Scanned/corrupted PDF recovery |
+| OCR (optional) | Tesseract | Scanned PDF recovery |
 
 ### Performance
 
-- **Processing speed**: ~2-5 seconds per PDF (depending on length)
-- **Memory usage**: ~2-4 GB (with transformer models loaded)
-- **Accuracy**: Estimated 85%+ precision on AI reference detection
+- **Processing speed**: ~2-5 seconds per PDF
+- **Memory usage**: ~2-4 GB (with transformers)
+- **Accuracy**: 85%+ precision (reduced false positives by ~30% in v6.2)
+
+### Dependencies
+
+**Required:**
+```bash
+pip install pandas numpy pdfplumber PyMuPDF sentence-transformers openpyxl plotly tqdm textblob scikit-learn
+```
+
+**Optional (Enhanced Features):**
+```bash
+pip install transformers torch          # FinBERT sentiment
+pip install pytesseract Pillow          # OCR for scanned PDFs
+pip install wordsegment                 # Text segmentation
+```
 
 ---
 
 ## 📚 Citation
 
-If you use this tool in academic research, please cite:
+If you use this tool in academic research:
 
 ```bibtex
-@software{ai_semantic_analyzer,
+@software{ai_semantic_analyzer_2026,
   author = {Galani, Serban},
-  title = {AI Semantic Analyzer: Fortune 500 AI Adoption Analysis System},
-  version = {6.1.1},
+  title = {AI Semantic Analyzer: Dual Taxonomy Framework for Corporate AI Adoption Analysis},
+  version = {6.2.0},
   year = {2026},
   url = {https://github.com/SerbanGalani/AI-Semantic-Analyzer}
 }
@@ -441,14 +291,27 @@ This software is developed for academic research purposes. Please contact the au
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open an issue or pull request for:
+Contributions welcome! Please open an issue or PR for:
 - New AI pattern suggestions
-- False positive pattern improvements
-- Bug fixes
+- False positive improvements
+- Vendor keyword additions
 - Documentation improvements
 
 ---
 
 ## 📧 Contact
 
-For questions or collaboration inquiries related to doctoral research on AI adoption in Fortune 500 companies, please open an issue on this repository.
+For questions or collaboration inquiries, please open an issue on this repository.
+
+---
+
+## 🔗 Resources
+
+- **[v6.2 Documentation](v6.2/README.md)** - Detailed v6.2 guide
+- **[v6.1 Documentation](v6.1/README.md)** - Legacy version docs
+- **[Migration Guide](docs/MIGRATION_v6.1_to_v6.2.md)** - Upgrade from v6.1
+- **[Taxonomy Comparison](docs/taxonomy_comparison.md)** - v6.1 vs v6.2 detailed comparison
+
+---
+
+**⭐ Star this repo if you find it useful for your research!**

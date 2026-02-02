@@ -1,44 +1,105 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-AI SEMANTIC ANALYZER v6.1.1 - MODUL 1: CORE & CONFIGURARE
+AI SEMANTIC ANALYZER v6.2.0 - MODUL 1: CORE & CONFIGURATION
 ═══════════════════════════════════════════════════════════════════════════════
 
-CHANGELOG v6.1.1 (Ian 2026):
-    - DB: persistă reference_strength / confidence_score / confidence_reasons în ai_references_raw
-    - AIReference: sector/country default 'Unknown' pentru compatibilitate
+Core module providing foundational components for AI Semantic Analyzer v6.2.
+
+MAJOR UPDATE v6.2.0 (February 2026):
+    🆕 EXTERNAL TAXONOMY INTEGRATION
+        - Replaced hardcoded AI_CATEGORIES (214 lines) with import from ai_taxonomy_v7
+        - Dual taxonomy framework: AI_APPLICATIONS + AI_TECHNOLOGIES
+        - 16 categories total (8 applications + 8 technologies)
+        - Legacy mapping: CATEGORY_MAPPING_V6_TO_V7
+    
+    📊 TAXONOMY v7.0.1 FEATURES
+        - Applications: A1-A8 (Product Innovation, Operations, CX, Risk, Analytics, Strategy, Governance, Talent)
+        - Technologies: B1-B8 (ML, DL, NLP, GenAI/LLMs, CV, Robotics, Infrastructure, General)
+        - 413 keywords total (vs 150 in v6.1, +176%)
+        - 99 patterns total (vs 45 in v6.1, +120%)
+        - Keyword confidence tiers (1=high, 2=medium, 3=low)
+        - Enhanced safety: removed ML standalone, agent, research, digitalization
+    
+    🔒 BACKWARD COMPATIBILITY
+        - v6.1 data fully compatible
+        - Category mapping preserved
+        - Database schema unchanged (optional: add taxonomy_version column)
+
+COMPONENTS:
+    1. Configuration Management
+       - AnalyzerConfig dataclass
+       - Interactive configuration wizard
+       - JSON config save/load
+       - Path validation
+    
+    2. Data Models
+       - AIReference: Individual AI reference with metadata
+       - DocumentResult: PDF processing results
+       - Fortune500Company: Company metadata
+    
+    3. Taxonomy System (NEW v6.2)
+       - AI_APPLICATIONS: 8 application categories
+       - AI_TECHNOLOGIES: 8 technology categories
+       - AI_CATEGORIES: Combined dict (backward compat)
+       - LEGACY_CATEGORY_MAPPING: v6.1 → v7.0 mapping
+    
+    4. Database Operations
+       - SQLite database creation
+       - Schema management
+       - Fortune 500 data import
+       - Reference storage (raw + deduplicated)
+    
+    5. False Positive Patterns
+       - ~60 exclusion patterns
+       - Format errors, acronyms, locations
+       - Measurement units (ML/DL)
+       - Board/governance false positives
+       - Text corruption detection
+    
+    6. AI Context Validators
+       - Short text validation (AI, ML, DL)
+       - Context requirement rules
+       - Semantic validation triggers
+
+CHANGELOG v6.2.0 (Feb 2026):
+    - BREAKING: AI_CATEGORIES now imported from ai_taxonomy_v7
+    - Added: LEGACY_CATEGORY_MAPPING for v6.1 compatibility
+    - Updated: ANALYZER_VERSION = "6.2.0"
+    - Removed: 214 lines of hardcoded taxonomy
+    - Enhanced: FALSE_POSITIVE_PATTERNS for better accuracy
+
+CHANGELOG v6.1.1 (Jan 2026):
+    - DB: persistă reference_strength / confidence_score / confidence_reasons
+    - AIReference: sector/country default 'Unknown'
     - Version bump 6.1.1
 
-CHANGELOG v6.1.0 (Ian 2026)
-        - Reducere false positives: scor de încredere + strength (mention_only)
-        - Prag semantic strict pentru semantic-only: 0.68
+CHANGELOG v6.1.0 (Jan 2026):
+    - Reducere false positives: scor de încredere + strength
+    - Prag semantic strict: 0.68 pentru semantic-only
 
-    CHANGELOG v6.0.6 (Ian 2026)
-        - introducere industrie si tara
+USAGE:
+    from ai_analyzer_v6_2_module1 import (
+        AnalyzerConfig, AIReference, AI_CATEGORIES,
+        create_database, logger
+    )
     
-    CHANGELOG v6.0.5 (Ianuarie 2026):
-        - 13 categorii AI specializate
-        - 80+ termeni GenAI 2025 noi
-        - Filtrare Robotics tradițional vs AI-robotics
-        - Filtrare RPA tradițional vs Intelligent Automation
-        - Threshold semantic 0.60
-        - False positives extinse (~60 patterns)
-        - Suport 2020-2025
-        - Context validators pentru texte scurte (AI, ML, DL)
-        - Text corruption detection
+    config = AnalyzerConfig(
+        input_folder="pdfs/",
+        output_folder="results/",
+        fortune500_csv="fortune500.csv"
+    )
 
+DEPENDENCIES:
+    - ai_taxonomy_v7: External taxonomy module (NEW in v6.2)
+    - pandas, numpy: Data processing
+    - sqlite3: Database operations
+    - sentence_transformers: Semantic analysis
+    - transformers (optional): FinBERT sentiment
 
-CHANGELOG v6.0 (Ianuarie 2025):
-    - 17 categorii AI (de la 12) - adăugat Agentic, GenAI, MLOps, Safety, Coding
-    - 80+ termeni GenAI 2025 noi
-    - Filtrare Robotics tradițional vs AI-robotics
-    - Filtrare RPA tradițional vs Intelligent Automation
-    - Threshold semantic 0.55 → 0.60
-    - False positives extinse (~40 patterns)
-    - Suport 2020-2025
-
-Autor: TeRa0
-Versiune: 6.0.5
-Data: Ianuarie 2025
+Author: TeRa0
+Version: 6.2.0
+Date: February 2026
+Part of: AI Semantic Analyzer
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -99,8 +160,8 @@ warnings.filterwarnings('ignore', category=UserWarning)
 # VERSION CONSTANT
 # ═══════════════════════════════════════════════════════════════════════════
 
-ANALYZER_VERSION = "6.1.0"
-ANALYZER_DATE = "Ianuarie 2026"
+ANALYZER_VERSION = "6.2.0"
+ANALYZER_DATE = "Februarie 2026"
 
 
 
@@ -173,7 +234,7 @@ def validate_path(path: str, path_type: str = "folder") -> bool:
 
 def interactive_config() -> Dict:
     print("\n" + "="*70)
-    print("AI SEMANTIC ANALYZER v6.1.1 - CONFIGURARE")
+    print("AI SEMANTIC ANALYZER v6.2.0 - CONFIGURARE")
     print("="*70)
     
     saved_config = load_saved_config()
@@ -244,11 +305,11 @@ class AnalyzerConfig:
     database_name: str = "fortune500_ai_analysis_v6.db"
     fortune500_csv: Optional[str] = None
     
-    # Thresholds - ACTUALIZAT v6.0
+    # Thresholds - ACTUALIZAT v6.2
     semantic_threshold: float = 0.60  # Crescut de la 0.55
-    # NOU v6.1: prag strict pentru semantic-only (reduce FP)
+    # v6.2(from v6.1) : prag strict pentru semantic-only (reduce FP)
     semantic_threshold_strict: float = 0.68
-    # NOU v6.1: prag relaxat folosit când există HARD triggers / implementare
+    # v6.2(from v6.1): prag relaxat folosit când există HARD triggers / implementare
     semantic_threshold_relaxed: float = 0.60
     deduplication_threshold: float = 0.85
     
@@ -304,7 +365,7 @@ class AnalyzerConfig:
         if not np.isclose(total_weight, 1.0, atol=1e-6):
             raise ValueError(f"Suma ponderilor trebuie să fie 1.0, este {total_weight}")
         Path(self.output_folder).mkdir(parents=True, exist_ok=True)
-        logger.info(f"Config v6.1: semantic_threshold={self.semantic_threshold}, strict={self.semantic_threshold_strict}, robotics_filter={self.filter_traditional_robotics}")
+        logger.info(f"Config v6.2: semantic_threshold={self.semantic_threshold}, strict={self.semantic_threshold_strict}, robotics_filter={self.filter_traditional_robotics}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -336,7 +397,7 @@ class AIReference:
     rpa_type: str = "not_rpa"  # 'ai_rpa', 'traditional_rpa', 'not_rpa'
     sentiment_confidence: str = "standard"  # 'standard', 'governance_adjusted', 'confirmed_negative'
     category_confidence: float = 1.0
-    # NOU v6.1: reducere false positives
+    # v6.2 (from v6.1): reducere false positives
     reference_strength: str = "unknown"  # "strong" | "medium" | "mention_only" | "unknown"
     confidence_score: float = 0.0  # 0..1
     confidence_reasons: str = ""  # string / JSON pentru audit
@@ -405,223 +466,19 @@ class AIAdoptionIndex:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# AI CATEGORIES v6.1 - 13 CATEGORII
+# AI CATEGORIES v7.0 - DUAL TAXONOMY (imported from external module)
 # ═══════════════════════════════════════════════════════════════════════════
 
-AI_CATEGORIES = {
-    'Strategic Investment': {
-        'description': 'Investiții strategice în tehnologii AI',
-        'keywords': [
-            'invest', 'acquisition', 'M&A', 'budget', 'funding', 'capital',
-            'partnership', 'venture', 'strategic initiative', 'AI spending',
-            'AI investment', 'AI budget', 'allocated', 'committed funds'
-        ],
-        'patterns': [
-            r'invest(?:ed|ing|ment).*(?:AI|artificial intelligence)',
-            r'(?:AI|artificial intelligence).*(?:budget|funding|capital)',
-            r'acquir(?:ed|ing|ition).*(?:AI|machine learning)',
-            r'\$[\d,.]+\s*(?:million|billion|M|B).*(?:AI|artificial intelligence)',
-        ]
-    },
-    
-    'Operational Implementation': {
-        'description': 'Implementări operaționale: automatizare, eficiență',
-        'keywords': [
-            'deploy', 'automate', 'RPA', 'efficiency', 'streamline', 
-            'optimize', 'workflow', 'process improvement', 'implementation',
-            'rollout', 'integration', 'operational excellence', 'productivity',
-            'intelligent automation', 'hyperautomation', 'IPA'
-        ],
-        'patterns': [
-            r'deploy(?:ed|ing|ment).*(?:AI|ML|machine learning)',
-            r'automat(?:e|ed|ing|ion).*(?:process|workflow|task)',
-            r'(?:AI|ML).*(?:efficiency|optimization|productivity)',
-            r'(?:intelligent|hyper)[\s-]?automation',
-        ]
-    },
-    
-    'Customer Experience': {
-        'description': 'AI pentru experiența clienților',
-        'keywords': [
-            'chatbot', 'personalization', 'customer experience', 'CX',
-            'customer service', 'support', 'recommendation', 'engagement',
-            'virtual assistant', 'conversational AI', 'customer journey'
-        ],
-        'patterns': [
-            r'(?:AI|ML).*(?:chatbot|virtual assistant|conversational)',
-            r'personali[zs](?:e|ed|ation).*(?:customer|experience)',
-            r'customer.*(?:experience|service).*(?:AI|ML)',
-            r'(?:recommendation|recommender)\s+(?:system|engine)',
-        ]
-    },
-    
-    'Product Development': {
-        'description': 'Dezvoltare produse cu AI',
-        'keywords': [
-            'R&D', 'innovation', 'AI-powered product', 'feature', 
-            'development', 'design', 'prototype', 'intelligent',
-            'AI-enabled', 'smart product', 'next-generation', 'AI-first'
-        ],
-        'patterns': [
-            r'AI[\s-]?powered.*(?:product|feature|solution)',
-            r'intelligent.*(?:system|solution|product)',
-            r'R&D.*(?:AI|artificial intelligence)',
-            r'(?:develop|build|create).*AI.*(?:product|solution)',
-        ]
-    },
-    
-    'Risk & Compliance': {
-        'description': 'Guvernanță AI, etică, compliance',
-        'keywords': [
-            'governance', 'ethics', 'responsible AI', 'bias', 'fairness',
-            'transparency', 'audit', 'compliance', 'regulation', 'GDPR',
-            'AI risk', 'model risk', 'AI policy', 'ethical AI', 'trustworthy AI'
-        ],
-        'patterns': [
-            r'responsible\s+(?:AI|artificial intelligence)',
-            r'(?:AI|ML).*(?:ethics|governance|compliance|regulation)',
-            r'(?:bias|fairness).*(?:detection|mitigation|audit)',
-            r'AI\s+(?:risk|policy|governance)\s+framework',
-        ]
-    },
-    
-    'Data & Analytics': {
-        'description': 'Analytics predictive, ML pentru insights',
-        'keywords': [
-            'predictive analytics', 'machine learning', 'data science',
-            'insights', 'forecasting', 'modeling', 'algorithm',
-            'data-driven', 'business intelligence', 'advanced analytics'
-        ],
-        'patterns': [
-            r'predictive\s+(?:analytics|model|insight)',
-            r'machine learning.*(?:model|algorithm|prediction)',
-            r'data[\s-]?driven.*(?:insight|decision|strategy)',
-            r'(?:advanced|augmented)\s+analytics',
-        ]
-    },
-    
-    'Talent & Workforce': {
-        'description': 'Talent AI, training, upskilling',
-        'keywords': [
-            'upskill', 'training', 'AI talent', 'reskill', 'hiring',
-            'recruitment', 'workforce', 'education', 'capability',
-            'data scientist', 'ML engineer', 'AI team', 'AI expertise'
-        ],
-        'patterns': [
-            r'(?:AI|ML).*(?:talent|skill|training|team)',
-            r'(?:upskill|reskill)(?:ing)?.*(?:AI|data|digital)',
-            r'hir(?:e|ed|ing).*(?:AI|ML|data).*(?:engineer|scientist)',
-        ]
-    },
-    
-    # ═══════════════════════════════════════════════════════════════════
-    # CATEGORII NOI v6.0
-    # ═══════════════════════════════════════════════════════════════════
-    
-    'Agentic AI Systems': {
-        'description': 'Sisteme autonome, AI agents (TREND 2025)',
-        'keywords': [
-            'autonomous', 'agent', 'agentic', 'orchestration', 'multi-agent',
-            'self-learning', 'adaptive system', 'AI agent', 'autonomous AI',
-            'tool use', 'function calling', 'agent framework', 'AutoGPT',
-            'computer use', 'browser agent', 'task automation', 'workflow agent'
-        ],
-        'patterns': [
-            r'(?:autonomous|agentic)\s+(?:system|AI|agent|workflow)',
-            r'(?:AI|intelligent)\s+agent(?:s)?',
-            r'multi[\s-]?agent\s+(?:system|orchestration)',
-            r'agent(?:ic)?\s+(?:RAG|retrieval|workflow)',
-            r'(?:tool|function)\s+(?:use|calling)',
-        ]
-    },
-    
-    'Generative AI & LLMs': {
-        'description': 'GenAI, LLM, content generation (TREND 2023-2025)',
-        'keywords': [
-            'generative AI', 'GenAI', 'large language model', 'LLM',
-            'GPT', 'ChatGPT', 'content generation', 'text generation',
-            'foundation model', 'transformer', 'Copilot', 'Claude',
-            'Gemini', 'Llama', 'multimodal', 'text-to-image', 'DALL-E',
-            'prompt engineering', 'fine-tuning', 'RAG', 'vector database'
-        ],
-        'patterns': [
-            r'generativ(?:e)?\s*(?:AI|artificial intelligence)',
-            r'(?:large\s+)?language\s+model(?:s)?',
-            r'\bLLM(?:s)?\b',
-            r'\bGPT[\s-]?[3-5]?\b',
-            r'\bChatGPT\b',
-            r'foundation\s+model(?:s)?',
-            r'\bGenAI\b',
-            r'(?:retrieval[\s-]?augmented|RAG)',
-            r'(?:vector|embedding)\s+(?:database|store)',
-        ]
-    },
-    
-    'AI Infrastructure & MLOps': {
-        'description': 'Infrastructură AI: cloud, MLOps, edge',
-        'keywords': [
-            'MLOps', 'cloud AI', 'edge computing', 'GPU', 'infrastructure',
-            'platform', 'compute', 'model deployment', 'scalability',
-            'AI cloud', 'model serving', 'inference', 'AI-as-a-service',
-            'TPU', 'NPU', 'AI accelerator', 'NVIDIA', 'model hosting'
-        ],
-        'patterns': [
-            r'\bMLOps\b',
-            r'(?:AI|ML)\s+(?:platform|infrastructure|stack)',
-            r'(?:edge|cloud)\s+(?:AI|computing|deployment)',
-            r'(?:model|AI)\s+(?:deployment|serving|hosting)',
-            r'(?:GPU|TPU|NPU)\s+(?:compute|cluster)',
-            r'AI[\s-]?as[\s-]?a[\s-]?service',
-        ]
-    },
-    
-    'Explainability & AI Safety': {
-        'description': 'XAI, responsible AI, safety',
-        'keywords': [
-            'explainability', 'XAI', 'interpretability', 'transparency',
-            'safety', 'trustworthy', 'accountability', 'fairness',
-            'AI safety', 'guardrails', 'hallucination', 'alignment',
-            'red teaming', 'model evaluation', 'bias detection'
-        ],
-        'patterns': [
-            r'(?:explainab|interpretab)(?:le|ility)',
-            r'\bXAI\b',
-            r'(?:trustworthy|transparent|accountable)\s+(?:AI|ML)',
-            r'(?:AI|model)\s+(?:safety|alignment|guardrails)',
-            r'(?:hallucination|confabulation)\s+(?:detection|prevention)',
-        ]
-    },
-    
-    'Research & Innovation': {
-        'description': 'Cercetare AI, brevete, colaborări academice',
-        'keywords': [
-            'patent', 'research', 'lab', 'collaboration', 'academic',
-            'publication', 'breakthrough', 'discovery', 'innovation',
-            'R&D center', 'AI research', 'frontier research'
-        ],
-        'patterns': [
-            r'(?:AI|ML)\s+(?:patent|research|lab|center)',
-            r'research.*(?:AI|artificial intelligence)',
-            r'collaborat(?:e|ion).*(?:university|academic)',
-            r'(?:AI|ML)\s+(?:breakthrough|innovation)',
-        ]
-    },
-    
-    'AI Coding & Development': {
-        'description': 'AI pentru dezvoltare software (NOU 2024-2025)',
-        'keywords': [
-            'AI coding', 'code generation', 'code completion', 'Copilot',
-            'AI-assisted development', 'vibe coding', 'AI IDE',
-            'code review AI', 'automated testing', 'AI debugging'
-        ],
-        'patterns': [
-            r'(?:AI|ML)[\s-]?(?:assisted|powered)\s+(?:coding|development)',
-            r'code\s+(?:generation|completion|suggestion)',
-            r'(?:GitHub|Microsoft)\s+Copilot',
-            r'(?:AI|automated)\s+(?:code review|testing|debugging)',
-        ]
-    },
-}
+from ai_taxonomy_v7 import AI_APPLICATIONS, AI_TECHNOLOGIES, CATEGORY_MAPPING_V6_TO_V7
+
+# Combine both dimensions into single dict for backward compatibility
+AI_CATEGORIES = {}
+AI_CATEGORIES.update(AI_APPLICATIONS)
+AI_CATEGORIES.update(AI_TECHNOLOGIES)
+
+# Legacy mapping for v6.1 → v7.0 category codes
+LEGACY_CATEGORY_MAPPING = CATEGORY_MAPPING_V6_TO_V7
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -629,7 +486,7 @@ AI_CATEGORIES = {
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════════════
-# FALSE POSITIVES v6.1 - EXTINS (~60 patterns)
+# FALSE POSITIVES v6.2 - EXTINS (~60 patterns, enhanced from v6.1)
 # ═══════════════════════════════════════════════════════════════════════════
 
 FALSE_POSITIVE_PATTERNS = [
@@ -662,7 +519,7 @@ FALSE_POSITIVE_PATTERNS = [
     r'\bShangh?ai\b', r'\bMumbai\b', r'\bChennai\b',
     
     # ═══════════════════════════════════════════════════════════════════
-    # UNITĂȚI DE MĂSURĂ (NOU v6.1 - pentru DL, ML false pozitive)
+    # UNITĂȚI DE MĂSURĂ (v6.2 (from v6.1) - pentru DL, ML false pozitive)
     # ═══════════════════════════════════════════════════════════════════
     r'\bDL\b(?=\s*(?:of\s+)?(?:water|waste|emissions?))',
     r'\bML\b(?=\s*(?:of\s+)?(?:water|metric|tons?|gallons?|liters?))',
@@ -672,14 +529,14 @@ FALSE_POSITIVE_PATTERNS = [
     r'\bML\b.*(?:metric|intensity|measurement)',
     
     # ═══════════════════════════════════════════════════════════════════
-    # TEXT CORUPT / ENCODING ISSUES (NOU v6.1)
+    # TEXT CORUPT / ENCODING ISSUES v6.2 (from v6.1)
     # ═══════════════════════════════════════════════════════════════════
     r'[#$%&*@^]{3,}',                      # 3+ caractere speciale consecutive
     r'[A-Za-z0-9]{40,}',                   # Strings >40 chars fără spații
     r'\b[bcdfghjklmnpqrstvwxz]{5,}\b',     # 5+ consoane consecutive (imposibil)
     
     # ═══════════════════════════════════════════════════════════════════
-    # BOARD OF DIRECTORS / GOVERNANCE FALSE POZITIVE (NOU v6.1)
+    # BOARD OF DIRECTORS / GOVERNANCE FALSE POZITIVE v6.2 (from v6.1)
     # ═══════════════════════════════════════════════════════════════════
     r'(?:BOD|board\s+of\s+directors?).*?(?:composed|experience|knowledge).*?AI',
     r'(?:communication|media|security),?\s*AI,?\s*(?:and\s+)?(?:cloud|digital)',
@@ -690,7 +547,7 @@ FALSE_POSITIVE_PATTERNS = [
     r'skills?\s+gap.*?directors?.*?AI',
     
     # ═══════════════════════════════════════════════════════════════════
-    # BIOGRAFIE / CV / CAREER FALSE POZITIVE (NOU v6.1)
+    # BIOGRAFIE / CV / CAREER FALSE POZITIVE v6.2 (from v6.1)
     # ═══════════════════════════════════════════════════════════════════
     r'(?:CEO|CFO|CTO|COO|founder|president)\s+(?:of|at)\s+\w+\s*AI\b',
     r'career\s+highlights.*?(?:AI|artificial)',
@@ -699,14 +556,14 @@ FALSE_POSITIVE_PATTERNS = [
     r'board\s+committees?.*?(?:AI|artificial)',
     
     # ═══════════════════════════════════════════════════════════════════
-    # EMBEDDING NON-AI (NOU v6.1)
+    # EMBEDDING NON-AI (v6.2 (from v6.1))
     # ═══════════════════════════════════════════════════════════════════
     r'\b[Ee]mbedding\s+(?:policy|policies|values?|principles?|practices?)',
     r'\b[Ee]mbedding\s+(?:ESG|sustainability|diversity|inclusion|culture)',
     r'\b[Ee]mbedded\s+in\s+(?:our|the)\s+(?:culture|organization|strategy)',
     
     # ═══════════════════════════════════════════════════════════════════
-    # HEADERS / STRUCTURĂ DOCUMENT FALSE POZITIVE (NOU v6.1)
+    # HEADERS / STRUCTURĂ DOCUMENT FALSE POZITIVE (v6.2 (from v6.1))
     # ═══════════════════════════════════════════════════════════════════
     r'AI\s+Company\s+Business\s+Overview',     # Header repetitiv SK
     r'Special\s+Report.*?AI\s+Company',
@@ -720,7 +577,7 @@ FALSE_POSITIVE_PATTERNS = [
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONTEXT VALIDATORS v6.1 - pentru texte scurte (AI, ML, DL singure)
+# CONTEXT VALIDATORS v6.2 - pentru texte scurte (AI, ML, DL singure)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Dacă textul găsit e foarte scurt (<=3 chars), contextul TREBUIE să conțină
@@ -828,7 +685,7 @@ class DatabaseManager:
             )
         ''')
 
-        # v6.1.1: asigură coloanele noi pentru FP scoring (compatibil DB vechi)
+        # v6.2: asigură coloanele pentru FP scoring (backward compatible)
         for coldef in [
             ("reference_strength", "TEXT DEFAULT 'unknown'"),
             ("confidence_score", "REAL DEFAULT 0.0"),

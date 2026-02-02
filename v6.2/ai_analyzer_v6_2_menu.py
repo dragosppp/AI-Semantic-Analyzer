@@ -1,36 +1,97 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-AI SEMANTIC ANALYZER v6.1.2 - MODUL MENIU INTERACTIV
+AI SEMANTIC ANALYZER v6.2.0 - INTERACTIVE MENU INTERFACE
 ═══════════════════════════════════════════════════════════════════════════════
 
-CHANGELOG v6.1.2 (Ian 2026):
-    - FIX: Eroare "cannot access local variable 'ref'" în detecția semantică
-    - FIX: DocumentResult lipsea sector/country pentru documente fără rezultat
-    - FIX: Export RAW acum include reference_strength, confidence_score, confidence_reasons
-    - FIX: Export DEDUP cu placeholder pentru câmpurile de confidence
-    - FIX: Calcul Index folosește schema corectă pentru ai_references_deduplicated
-    - FIX: AIReference în _detect_by_semantics primește acum strength/conf/reasons
+Interactive command-line interface for AI Semantic Analyzer v6.2.0.
 
-CHANGELOG v6.0.5:
-    - NOU: Opțiunea 1.6 - Re-procesare documente cu TEXT CORUPT (OCR)
-    - NOU: Coloana text_status în processed_documents pentru tracking status text
-    - NOU: DocumentProcessor.process_pdf() returnează acum (result, text_status)
-    - NOU: mark_document_processed() acceptă parametrul text_status
-    - NOU: Detectare automată text corupt (encoding issues, OCR necesar)
-    - ÎMBUNĂTĂȚIT: Statistici extinse cu documente corupte/OCR
+FEATURES:
+    1️⃣  Process PDFs & Extract AI References
+        - Multi-threaded PDF processing
+        - Pattern matching + semantic analysis
+        - Dual taxonomy classification (16 categories)
+        - False positive filtering
+        - Context extraction
     
-CHANGELOG v6.0.4:
-    - RESTRUCTURARE COMPLETĂ opțiuni 1.x:
-      * 1.1 = Procesează TOATE documentele (noi + re-analiză existente)
-      * 1.2 = Procesează BATCH după poziții (noi + re-analiză în range)
-      * 1.3 = Procesează doar documente NOI - toate neprocesate
-      * 1.4 = Procesează doar documente NOI - batch de N
-      * 1.5 = Reverificare documente FĂRĂ referințe AI
-      * 1.6 = Re-procesare documente cu TEXT CORUPT (OCR) [NOU în v6.0.5]
-    - La re-analiză se incrementează occurrence_count pentru referințe existente
-    - Referințele noi găsite la re-analiză se adaugă corect
-    - Statistici separate pentru documente noi vs re-analizate
-    - Mesaje clare despre ce face fiecare opțiune
+    2️⃣  Analyze Existing Dataset
+        - Statistical analysis across companies/years/sectors
+        - Temporal trend analysis (2020-2025)
+        - Category distribution analysis
+        - Vendor transparency analysis (NEW in v6.2)
+    
+    3️⃣  Deduplicate References
+        - Semantic deduplication (cosine similarity)
+        - Configurable similarity threshold
+        - Preserves highest confidence instances
+    
+    4️⃣  Sentiment Analysis
+        - FinBERT sentiment scoring
+        - Context-aware sentiment classification
+        - Batch processing with progress tracking
+    
+    5️⃣  Generate Visualizations
+        - Interactive Plotly charts (HTML)
+        - Temporal trends, category distributions
+        - Company comparisons, sector analysis
+        - Technology adoption heatmaps (NEW in v6.2)
+    
+    6️⃣  Export Data
+        - Excel: Raw + deduplicated datasets
+        - JSON: Structured export with metadata
+        - SQLite: Full database export
+        - CSV: Custom filtered exports
+    
+    7️⃣  Database Management
+        - View statistics
+        - Query interface
+        - Backup/restore
+        - Schema migration v6.1 → v6.2
+    
+    8️⃣  Configuration
+        - Save/load analysis settings
+        - Update Fortune 500 list
+        - Configure semantic thresholds
+        - Manage taxonomy version
+
+MENU WORKFLOW:
+    Main Menu → Select Option → Execute → Return to Menu
+    
+    Each function includes:
+    - Progress indicators (tqdm)
+    - Error handling
+    - Result summaries
+    - Export confirmations
+
+NEW IN v6.2:
+    ✅ Dual taxonomy support (Applications + Technologies)
+    ✅ Vendor transparency analysis module
+    ✅ Technology-application cross-analysis
+    ✅ Enhanced category distribution (16 categories)
+    ✅ Keyword tier confidence reporting
+    ✅ Legacy v6.1 compatibility mode
+
+TECHNICAL NOTES:
+    - Colored output: colorama (optional)
+    - Progress bars: tqdm
+    - User input validation: built-in
+    - Error recovery: try-except blocks
+    - Logging: integrated with module1 logger
+
+USAGE:
+    python ai_analyzer_v6_2_main.py
+    # Menu loads automatically after configuration
+
+INTEGRATION:
+    Orchestrates all modules:
+    - module1: Core config & models
+    - module2: PDF processing & detection
+    - module3: Analysis & visualization
+    - module4: Export functions
+
+Author: TeRa0
+Version: 6.2.0
+Date: February 2026
+Part of: AI Semantic Analyzer
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -50,27 +111,27 @@ import numpy as np
 
 # Import toate modulele v6.0.6
 try:
-    from ai_analyzer_v6_1_module1 import (
+    from ai_analyzer_v6_2_module1 import (
         logger, AnalyzerConfig, AIReference, DocumentResult,
         AIAdoptionIndex, DatabaseManager, AI_CATEGORIES,
         load_saved_config, save_config, CONFIG_FILE,
         ANALYZER_VERSION
     )
-    from ai_analyzer_v6_1_module2 import (
+    from ai_analyzer_v6_2_module2 import (
         PDFTextExtractor, AIReferenceDetector, FilenameParser,
         SemanticModelLoader, get_ai_description_embeddings
     )
-    from ai_analyzer_v6_1_module3 import (
+    from ai_analyzer_v6_2_module3 import (
         FinBERTSentimentAnalyzer, ImprovedSentimentAnalyzer,
         SemanticDeduplicator, AIAdoptionIndexCalculatorV6
     )
-    from ai_analyzer_v6_1_module4 import (
+    from ai_analyzer_v6_2_module4 import (
         ExcelExporter, VisualizationGenerator, GroupAggregator,
         AnalysisPipeline
     )
 except ImportError as e:
     print(f"EROARE: Nu s-au putut importa modulele necesare: {e}")
-    print("Asigură-te că toate fișierele ai_analyzer_v6_1_module*.py sunt în același folder.")
+    print("Asigură-te că toate fișierele ai_analyzer_v6_2_module*.py sunt în același folder.")
     sys.exit(1)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -122,7 +183,7 @@ class ExtendedDatabaseManager(DatabaseManager):
         except:
             pass
         
-                # v6.1.1: FP meta columns (reference_strength / confidence_score / confidence_reasons)
+                # v6.2: Dual taxonomy support + v6.1.1 FP meta columns
         try:
             cursor.execute("ALTER TABLE ai_references_raw ADD COLUMN reference_strength TEXT DEFAULT 'unknown'")
             logger.info("Adăugat coloana reference_strength la ai_references_raw")
@@ -1011,7 +1072,7 @@ class MenuManager:
                     
                     # Creează un DocumentResult minimal pentru marcare
                     try:
-                        from ai_analyzer_v6_1_module2 import FilenameParser
+                        from ai_analyzer_v6_2_module2 import FilenameParser
                         parser = FilenameParser()
                         parsed = parser.parse_filename(filename)
                         
@@ -1586,7 +1647,7 @@ class MenuManager:
                 continue
             
             # Creează obiecte AIReference
-            # Schema ai_references_raw (v6.1.2):
+            # Schema ai_references_raw (v6.2 - backward compatible with v6.1):
             # 0:id, 1:company, 2:year, 3:position, 4:industry, 5:sector, 6:country,
             # 7:doc_type, 8:page, 9:text, 10:context, 11:category, 12:sentiment,
             # 13:sentiment_score, 14:semantic_score, 15:detection_method, 16:source
@@ -1905,7 +1966,7 @@ class MenuManager:
             print("  ⚠ Nu există referințe raw pentru export.")
             return
         
-        # Schema ai_references_raw (v6.1.1):
+        # Schema ai_references_raw (v6.2):
         # 0:id, 1:company, 2:year, 3:position, 4:industry, 5:sector, 6:country,
         # 7:doc_type, 8:page, 9:text, 10:context, 11:category, 12:sentiment,
         # 13:sentiment_score, 14:semantic_score, 15:detection_method, 16:source,
@@ -1932,7 +1993,7 @@ class MenuManager:
                 'source': row[16] if len(row) > 16 else '',
                 'robotics_type': row[17] if len(row) > 17 else '',
                 'rpa_type': row[18] if len(row) > 18 else '',
-                # Câmpuri noi v6.1.1
+                # Câmpuri v6.2 (includes v6.1.1 fields)
                 'reference_strength': row[21] if len(row) > 21 else 'unknown',
                 'confidence_score': row[22] if len(row) > 22 else 0.0,
                 'confidence_reasons': row[23] if len(row) > 23 else '',

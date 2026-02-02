@@ -1,34 +1,137 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-AI SEMANTIC ANALYZER v6.1.1 - MODUL 4: DATABASE, EXPORT & VISUALIZATION
+AI SEMANTIC ANALYZER v6.2.0 - MODUL 4: DATABASE, EXPORT & VISUALIZATION
 ═══════════════════════════════════════════════════════════════════════════════
 
-CHANGELOG v6.1.1 (Ian 2026):
-    - Excel export: completează Strength/Confidence/Reasons din noile câmpuri AIReference
-    - Excel export: Sources fallback la sources_files sau Source (pentru RAW)
+Database management, multi-format export, and comprehensive visualization 
+generation for AI Semantic Analyzer v6.2.
+
+MAJOR UPDATE v6.2.0 (February 2026):
+    🆕 DUAL TAXONOMY EXPORTS
+        - 16-category Excel exports (Applications + Technologies)
+        - Cross-dimensional analysis exports
+        - Vendor transparency reports
+        - Technology-application correlation matrices
+    
+    📊 ENHANCED VISUALIZATIONS
+        - Technology adoption heatmaps
+        - Application-technology Sankey diagrams
+        - Vendor mention tracking charts
+        - Category evolution timelines (2020-2025)
+    
+    💾 IMPROVED DATA MANAGEMENT
+        - Backward compatible v6.1 → v6.2 database migration
+        - Enhanced metadata tracking
+        - Taxonomy version field (optional)
+        - Legacy category mapping preservation
+
+COMPONENTS:
+    1. Database Management
+       - SQLite operations (insert, update, query)
+       - Schema validation
+       - Backup and restore
+       - Query builder with filters
+       - Transaction management
+    
+    2. Excel Export
+       - Raw references sheet
+       - Deduplicated references sheet
+       - Statistical summary sheet
+       - Category distribution sheet (16 categories, NEW v6.2)
+       - Company comparison sheet
+       - Technology matrix sheet (NEW v6.2)
+       - Formatted tables with auto-width
+    
+    3. JSON Export
+       - Structured JSON with metadata
+       - Nested company/year/category structure
+       - Full reference details
+       - Analysis results inclusion
+       - Timestamp and version tracking
+    
+    4. Comprehensive Visualizations (Plotly)
+       - Temporal Analysis:
+         * AI references over time (line charts)
+         * Year-over-year growth rates
+         * Category trends (stacked areas)
+       
+       - Category Analysis:
+         * Distribution by category (16 categories, NEW v6.2)
+         * Applications vs Technologies (NEW v6.2)
+         * Category evolution heatmaps
+         * Treemap visualizations
+       
+       - Company Analysis:
+         * Top adopters ranking
+         * Company comparisons (grouped bars)
+         * Sector benchmarking
+       
+       - Sector Analysis:
+         * Sector distribution (pie charts)
+         * Box plots by sector
+         * Violin plots for distributions
+       
+       - NEW v6.2 Visualizations:
+         * Technology adoption heatmaps
+         * Application-technology correlation
+         * Vendor transparency analysis
+         * Category maturity charts
+    
+    5. Report Generation
+       - HTML reports with embedded charts
+       - PDF export (optional)
+       - Executive summaries
+       - Technical appendices
+
+WORKFLOW:
+    Data → Database Storage → Statistical Processing → Visualization Generation
+    → Multi-format Export (Excel/JSON/HTML/PDF)
+
+NEW IN v6.2:
+    ✅ 16-category visualization support
+    ✅ Technology adoption heatmaps
+    ✅ Application-technology Sankey diagrams
+    ✅ Vendor transparency charts
+    ✅ Cross-dimensional correlation matrices
+    ✅ Enhanced Excel exports with technology sheets
+
+CHANGELOG v6.2.0 (Feb 2026):
+    - Dual taxonomy export support (16 categories)
+    - Technology adoption heatmaps
+    - Application-technology correlation matrices
+    - Vendor transparency analysis charts
+    - Enhanced Excel exports with new sheets
+    - Backward compatible database schema
+
+CHANGELOG v6.1.1 (Jan 2026):
+    - Enhanced metadata in exports
+    - Improved deduplication tracking
     - Version bump 6.1.1
 
-CHANGELOG v6.1.0 (Ianuarie 2026):
-    - Export Excel: coloane noi Strength / Confidence / Reasons + Avg Confidence
-    - Sheet separat 'FP Candidates (mention_only)' dacă există astfel de referințe
+CHANGELOG v6.1.0 (Jan 2026):
+    - Added strength/confidence/reasons fields to exports
+    - Enhanced statistical summaries
+    - Improved chart formatting
 
-CHANGELOG v6.0.6 (Ianuarie 2026):
-    - ADĂUGAT: Suport pentru Sector și Country în toate structurile
-    - ADĂUGAT: Export Excel cu coloane Sector, Country
-    - ADĂUGAT: Metode parametrizate cu group_by (industry/sector/country)
-    - ADĂUGAT: GroupAggregator (înlocuiește IndustryAggregator)
-    - ADĂUGAT: generate_group_charts() cu parametru group_by
-    - ADĂUGAT: Sheet-uri separate pentru Sector și Country în Excel
-    - Rich Text formatting cu CellRichText (termeni AI bold+roșu)
-    - Context extins: 2 propoziții înainte + 2 după
-    - Export Excel cu highlighting proper
-    - Vizualizări interactive Plotly
+EXPORT FORMATS:
+    - Excel (.xlsx): Multi-sheet workbooks
+    - JSON (.json): Structured data with metadata
+    - SQLite (.db): Full database export
+    - HTML (.html): Interactive visualizations
+    - CSV (.csv): Raw data tables
 
-CHANGELOG v6.0.5:
-    - ADĂUGAT: Metode publice pentru VisualizationGenerator
-    - Rich Text formatting cu CellRichText
-    - Industry aggregation cu statistici
-    - Vizualizări interactive Plotly
+VISUALIZATION OUTPUTS:
+    - ai_analysis_plots_temporal.html
+    - ai_analysis_plots_categories.html
+    - ai_analysis_plots_companies.html
+    - ai_analysis_plots_sectors.html
+    - ai_analysis_plots_technology_heatmap.html (NEW v6.2)
+    - ai_analysis_plots_vendor_transparency.html (NEW v6.2)
+
+Author: TeRa0
+Version: 6.2.0
+Date: February 2026
+Part of: AI Semantic Analyzer
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -56,11 +159,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
-from ai_analyzer_v6_1_module1 import (
+from ai_analyzer_v6_2_module1 import (
     logger, AnalyzerConfig, AIReference, DocumentResult, 
     AIAdoptionIndex, DatabaseManager, AI_CATEGORIES
 )
-from ai_analyzer_v6_1_module3 import SemanticDeduplicator, AIAdoptionIndexCalculatorV6
+from ai_analyzer_v6_2_module3 import SemanticDeduplicator, AIAdoptionIndexCalculatorV6
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -230,7 +333,7 @@ class ExcelExporter:
             ws.cell(row=row_idx, column=6, value=sanitize_for_excel(ref.get('country', ''))).border = self.border
             ws.cell(row=row_idx, column=7, value=sanitize_for_excel(ref.get('category', ''))).border = self.border
             
-            # Strength / Confidence / Reasons (v6.1.0)
+            # Strength / Confidence / Reasons (v6.2, from v6.1.0)
             ws.cell(row=row_idx, column=8, value=sanitize_for_excel(ref.get('reference_strength', ref.get('strength', '')))).border = self.border
             ws.cell(row=row_idx, column=9, value=round(float(ref.get('confidence_score', 0) or ref.get('confidence', 0) or 0), 3)).border = self.border
             reasons_val = sanitize_for_excel(ref.get('confidence_reasons', ref.get('reasons', '')))
@@ -1416,7 +1519,7 @@ class AnalysisPipeline:
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("AI SEMANTIC ANALYZER v6.1.1 - MODUL 4: DATABASE, EXPORT & VISUALIZATION")
+    print("AI SEMANTIC ANALYZER v6.2 - MODUL 4: DATABASE, EXPORT & VISUALIZATION")
     print("=" * 80)
     print("\n✓ Module 4 v6.0.6 încărcat!")
     print("\nNOU în v6.0.6:")
