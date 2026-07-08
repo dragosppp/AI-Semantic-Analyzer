@@ -1,0 +1,7 @@
+{
+  "input_folder": "C:\\Users\\drago\\Desktop\\AI-Semantic-Analyzer\\companies_reports",
+  "company_metadata_csv": null,
+  "output_folder": "RESULT_FULL_2",
+  "top_n": 3,
+  "parallel_threads": 12
+}

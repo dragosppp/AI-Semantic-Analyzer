@@ -42,11 +42,18 @@ Results_v6/
 Results/
 Output/
 charts/
+app/RESULT/
+app/RESULT_FULL/
+app/RESULT_FULL_2/
+app/RESULT_FULL_3/
+~$*.xlsx
 
 # Database files
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 
 # Log files
 *.log
@@ -56,10 +63,10 @@ ai_analyzer_v6.log
 analyzer_config_v6.json
 
 # Excel/CSV outputs
-ai_references_raw.xlsx
-ai_references_deduplicated.xlsx
-ai_adoption_index.xlsx
-analysis_categories_v6.xlsx
+# ai_references_raw.xlsx
+# ai_references_deduplicated.xlsx
+# ai_adoption_index.xlsx
+# analysis_categories_v6.xlsx
 
 # JSON outputs
 results.json

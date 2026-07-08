@@ -1,56 +1,58 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-AI SEMANTIC ANALYZER v6.1.2 - MODUL 2: AI DETECTION, CONTEXT & FP REDUCTION
+AI SEMANTIC ANALYZER - AI DETECTION, CONTEXT & FP REDUCTION
 ═══════════════════════════════════════════════════════════════════════════════
 
-CHANGELOG v6.1.2 (Ian 2026):
-    - FIX: _detect_by_semantics() acum transmite reference_strength, confidence_score, 
-           confidence_reasons la AIReference (rezolvă "cannot access local variable 'ref'")
+PDF processing, AI reference detection, dual-taxonomy classification, and
+false-positive filtering.
 
-CHANGELOG v6.1.1 (Ian 2026):
-    - Populează AIReference.reference_strength / confidence_score / confidence_reasons (nu doar în detection_method)
-    - Compat export: strength/confidence apar în RAW și DEDUP
-    - Version bump 6.1.1
+COMPONENTS:
+    1. PDF Text Extraction
+       - pdfplumber: Primary extraction
+       - PyMuPDF (fitz): Fallback
+       - Tesseract OCR: Image-based PDFs
+       - Text corruption detection
 
+    2. Semantic Model (Singleton)
+       - SentenceTransformer: all-MiniLM-L6-v2
+       - Lazy loading for performance
+       - Cosine similarity matching
 
-═══════════════════════════════════════════════════════════════════════════════
-AI SEMANTIC ANALYZER v6.0 - MODUL 2: PDF PROCESSING & EXTRACTION
-═══════════════════════════════════════════════════════════════════════════════
+    3. AI Reference Detection
+       - Hard patterns: AI/ML/DL with context
+       - Soft patterns: Domain-specific terms
+       - Semantic validation (threshold: 0.60-0.68)
+       - Negation filtering (drop hard / down-weight soft negations)
+       - Confidence scoring with keyword tiers
 
-    AI SEMANTIC ANALYZER v6.0.6 - MODUL 2: PDF PROCESSING & EXTRACTION
-    
-    CHANGELOG V6.0.6 (Ianuarie 2026)
-        - introducere sector si tara 
-    
-    
-    CHANGELOG v6.0.5 (Ianuarie 2026):
-        - 80+ AI patterns pentru detecție
-        - 65+ descrieri canonice pentru semantic matching
-        - Robotics/RPA classification functions
-        - Improved context extraction cu marcaje >>><<<
-        - Category classifier v6.1 cu fallback rules
-        - False positive filter v6.1 cu validare text corupt
-        - Text corruption detection pentru OCR
-        - Context extractor cu sentence-based extraction
+    4. Category Classification
+       - Classic taxonomy (CategoryClassifier): keyword + pattern + fallback
+       - EU_Semantics taxonomy (EUCategoryClassifier), in parallel
 
+    5. False Positive Filtering
+       - ~60 exclusion patterns
+       - Text corruption detection
+       - Short text validators (AI, ML, DL)
+       - Measurement unit exclusions
 
-CHANGELOG v6.0:
-    - 80+ AI patterns (de la ~20)
-    - 65+ descrieri canonice pentru semantic matching
-    - Robotics/RPA classification functions
-    - Improved context extraction (no boilerplate)
-    - Category classifier cu confidence scores
+WORKFLOW:
+    PDF -> Extract Text -> Detect AI References -> Classify Categories
+    -> Filter False Positives -> Extract Context -> Return AIReference objects
 
-═══════════════════════════════════════════════════════════════════════════════
+TECHNICAL NOTES:
+    - Semantic threshold: 0.60 (general), 0.68 (strict for mention-only)
+    - Multi-threading safe: SemanticModelLoader singleton
+    - Memory efficient: Lazy model loading
 
+Author: TeRa0
+Part of: AI Semantic Analyzer
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
-
 from __future__ import annotations
+
 import time
 import re
-from typing import List, Dict, Tuple, Optional
 from pathlib import Path
 
 import pandas as pd
@@ -66,6 +68,13 @@ try:
 except ImportError:
     OCR_AVAILABLE_LOCAL = False
 
+# Verify tesseract binary is on PATH; pytesseract being importable is not enough.
+# Without this check, pytesseract.image_to_string() fails per-PDF instead of cleanly skipping.
+if OCR_AVAILABLE_LOCAL:
+    import shutil as _shutil
+    if _shutil.which("tesseract") is None:
+        OCR_AVAILABLE_LOCAL = False
+
 try:
     import wordsegment
     wordsegment.load()
@@ -73,9 +82,11 @@ try:
 except ImportError:
     WORDSEGMENT_AVAILABLE = False
 
-from ai_analyzer_v6_1_module1 import (
+from _02_core import (
     logger, AnalyzerConfig, AIReference, DocumentResult,
-    AI_CATEGORIES, FALSE_POSITIVE_PATTERNS, OCR_AVAILABLE,
+    AI_CATEGORIES, AI_APPLICATIONS, AI_TECHNOLOGIES,
+    EU_CATEGORIES, FALLBACK_NAME_TO_CODE,
+    FALSE_POSITIVE_PATTERNS, OCR_AVAILABLE,
     TRADITIONAL_ROBOTICS_PATTERNS, AI_ROBOTICS_PATTERNS,
     RPA_NON_AI_PATTERNS, RPA_AI_PATTERNS
 )
@@ -83,7 +94,7 @@ from ai_analyzer_v6_1_module1 import (
 import warnings
 import logging
 
-# Suprimă mesajele deranjante din PDF processing
+# Suppress noisy messages from PDF processing
 warnings.filterwarnings("ignore")
 logging.getLogger("pdfminer").setLevel(logging.CRITICAL)
 logging.getLogger("pdfplumber").setLevel(logging.CRITICAL)
@@ -105,10 +116,10 @@ class SemanticModelLoader:
     
     def __init__(self):
         if SemanticModelLoader._model is None:
-            logger.info(f"Încărcare model semantic: {self.MODEL_NAME}")
+            logger.info(f"Loading semantic model: {self.MODEL_NAME}")
             start_time = time.time()
             SemanticModelLoader._model = SentenceTransformer(self.MODEL_NAME)
-            logger.info(f"Model încărcat în {time.time() - start_time:.2f}s")
+            logger.info(f"Model loaded in {time.time() - start_time:.2f}s")
     
     @property
     def model(self):
@@ -116,7 +127,7 @@ class SemanticModelLoader:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# AI MAIN PATTERNS v6.0 - 80+ PATTERNS
+# AI MAIN PATTERNS - 80+ PATTERNS
 # ═══════════════════════════════════════════════════════════════════════════
 
 AI_MAIN_PATTERNS = [
@@ -146,7 +157,7 @@ AI_MAIN_PATTERNS = [
     r'\btext[\s-]to[\s-](?:image|video|speech)\b',
     r'\b(?:content|text|code|image)\s+generation\b',
     
-    # Modele specifice
+    # Specific models
     r'\bCopilot\b', r'\bClaude\b', r'\bGemini\b',
     r'\bLlama(?:\s+\d)?\b', r'\bMistral\b',
     r'\bDALL[\s-]?E\b', r'\bStable\s+Diffusion\b',
@@ -213,7 +224,7 @@ AI_MAIN_PATTERNS = [
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# AI CANONICAL DESCRIPTIONS v6.0 - 65+ DESCRIERI
+# AI CANONICAL DESCRIPTIONS - 65+ DESCRIPTIONS
 # ═══════════════════════════════════════════════════════════════════════════
 
 AI_CANONICAL_DESCRIPTIONS = [
@@ -323,7 +334,7 @@ def get_ai_description_embeddings():
     global _AI_DESCRIPTION_EMBEDDINGS
     if _AI_DESCRIPTION_EMBEDDINGS is None:
         loader = SemanticModelLoader.get_instance()
-        logger.info("Calculare embeddings pentru descrieri AI canonice...")
+        logger.info("Computing embeddings for canonical AI descriptions...")
         _AI_DESCRIPTION_EMBEDDINGS = loader.model.encode(
             AI_CANONICAL_DESCRIPTIONS, convert_to_tensor=True, show_progress_bar=False
         )
@@ -331,7 +342,7 @@ def get_ai_description_embeddings():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ROBOTICS & RPA CLASSIFICATION v6.0
+# ROBOTICS & RPA CLASSIFICATION
 # ═══════════════════════════════════════════════════════════════════════════
 
 _compiled_traditional_robotics = None
@@ -453,31 +464,31 @@ def get_text_cleaner() -> TextCleaner:
     return _text_cleaner
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TEXT CORRUPTION DETECTOR v6.0.4
+# TEXT CORRUPTION DETECTOR
 # ═══════════════════════════════════════════════════════════════════════════
 
-def is_text_corrupted(text: str) -> Tuple[bool, str]:
+def is_text_corrupted(text: str) -> tuple[bool, str]:
     """
-    Verifică dacă textul extras este corupt/ilizibil.
+    Check whether the extracted text is corrupted/unreadable.
     Returns: (is_corrupted, reason)
     """
     if not text or len(text) < 100:
         return True, "empty"
     
-    # 1. Caractere replacement (�)
+    # 1. Replacement characters
     replacement_count = text.count('�') + text.count('\ufffd')
     if replacement_count > 0:
         ratio = replacement_count / len(text)
         if ratio > 0.05:
             return True, "replacement_chars"
     
-    # 2. Prea puține litere
+    # 2. Too few letters
     letter_count = sum(1 for c in text if c.isalpha())
     letter_ratio = letter_count / len(text)
     if letter_ratio < 0.40:
         return True, "low_letters"
     
-    # 3. Prea puține spații
+    # 3. Too few spaces
     space_ratio = text.count(' ') / len(text)
     if len(text) > 500 and space_ratio < 0.08:
         return True, "no_spaces"
@@ -491,59 +502,69 @@ def is_text_corrupted(text: str) -> Tuple[bool, str]:
 class PDFTextExtractor:
     def __init__(self, config: AnalyzerConfig):
         self.config = config
-        
-        # OCR disponibil dacă AMBELE verificări sunt True
+
+        # OCR available only if BOTH checks are True
         self.ocr_available = OCR_AVAILABLE and OCR_AVAILABLE_LOCAL
         if self.ocr_available:
-            logger.info("✓ OCR (Tesseract) disponibil")
+            logger.info("OCR (Tesseract) available")
         else:
-            logger.warning("⚠ OCR indisponibil - unele PDF-uri pot avea text incomplet")
+            logger.warning("OCR unavailable - some PDFs may have incomplete text")
 
         self.text_cleaner = get_text_cleaner()
-    
-    def extract_text_from_pdf(self, pdf_path: str) -> Tuple[str, int, str]:
+
+    def extract_text_from_pdf(self, pdf_path: str) -> tuple[str, int, str]:
         """
-        Extrage text din PDF.
-        
-        Returns: 
+        Extract text from PDF.
+
+        Returns:
             (text, num_pages, text_status)
             text_status: 'valid', 'corrupted_ocr_success', 'corrupted_ocr_failed', 'ocr_needed', 'empty'
         """
-        logger.info(f"Extragere text din: {pdf_path}")
-        
-        text, num_pages = self._extract_with_pdfplumber(pdf_path)
-        
+        logger.info(f"Extracting text from: {pdf_path}")
+
+        # PyMuPDF (fitz) is the PRIMARY extractor: far lighter on memory and
+        # faster than pdfplumber for plain-text extraction. pdfplumber is kept
+        # as a fallback for the rare PDFs where fitz yields too little text.
+        text, num_pages = self._extract_with_pymupdf(pdf_path)
+
         if len(text.strip()) < self.config.min_text_length:
-            text, num_pages = self._extract_with_pymupdf(pdf_path)
-        
-        # Verifică dacă textul e corupt
+            text, num_pages = self._extract_with_pdfplumber(pdf_path)
+
+        # Check whether the text is corrupted
         is_corrupted, reason = is_text_corrupted(text)
-        
-        if is_corrupted and reason != "empty":
-            logger.warning(f"Text corupt detectat ({reason}): {pdf_path}")
+
+        # Try OCR for corrupted-non-empty AND fully-empty extractions
+        # (scanned PDFs / xref-damaged PDFs land in the "empty" branch).
+        needs_ocr = is_corrupted or len(text.strip()) < self.config.min_text_length
+
+        if needs_ocr:
+            if reason and reason != "empty":
+                logger.warning(f"Corrupted text detected ({reason}): {pdf_path}")
+            else:
+                logger.warning(f"No extractable text in {pdf_path} - attempting OCR")
             if self.ocr_available:
                 text_ocr = self._extract_with_ocr(pdf_path)
                 is_still_corrupted, _ = is_text_corrupted(text_ocr)
-                if not is_still_corrupted and len(text_ocr) > len(text) * 0.5:
+                if not is_still_corrupted and len(text_ocr) >= max(self.config.min_text_length, len(text) * 0.5):
                     text = self.text_cleaner.clean_text(text_ocr)
-                    logger.info(f"✓ OCR reușit: {len(text)} caractere din {num_pages} pagini")
+                    logger.info(f"OCR succeeded: {len(text)} characters from {num_pages} pages")
                     return text, num_pages, "corrupted_ocr_success"
                 else:
-                    logger.warning(f"✗ OCR eșuat pentru {pdf_path}")
+                    logger.warning(f"OCR failed for {pdf_path}")
                     return text, num_pages, "corrupted_ocr_failed"
             else:
-                logger.warning(f"OCR indisponibil pentru {pdf_path}")
+                logger.warning(f"OCR unavailable for {pdf_path}")
                 return text, num_pages, "ocr_needed"
-        
+
         if len(text.strip()) < self.config.min_text_length:
             return text, num_pages, "empty"
-        
+
         text = self.text_cleaner.clean_text(text)
-        logger.info(f"✓ Extras {len(text)} caractere din {num_pages} pagini")
+        logger.info(f"Extracted {len(text)} characters from {num_pages} pages")
         return text, num_pages, "valid"
-    
-    def _extract_with_pdfplumber(self, pdf_path: str) -> Tuple[str, int]:
-        text_parts = []
+
+    def _extract_with_pdfplumber(self, pdf_path: str) -> tuple[str, int]:
+        text_parts: list[str] = []
         num_pages = 0
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -552,13 +573,22 @@ class PDFTextExtractor:
                     page_text = page.extract_text()
                     if page_text:
                         text_parts.append(page_text)
-            return "\n".join(text_parts), num_pages
+                    # Release per-page caches immediately so a long PDF doesn't
+                    # retain every page's parsed objects until the doc closes.
+                    page.flush_cache()
+                    try:
+                        page.get_textmap.cache_clear()
+                    except Exception:
+                        pass
+            text = "\n".join(text_parts)
+            text_parts.clear()
+            return text, num_pages
         except Exception as e:
-            logger.warning(f"Eroare pdfplumber: {e}")
+            logger.warning(f"pdfplumber error: {e}")
             return "", 0
-    
-    def _extract_with_pymupdf(self, pdf_path: str) -> Tuple[str, int]:
-        text_parts = []
+
+    def _extract_with_pymupdf(self, pdf_path: str) -> tuple[str, int]:
+        text_parts: list[str] = []
         num_pages = 0
         try:
             doc = fitz.open(pdf_path)
@@ -568,13 +598,15 @@ class PDFTextExtractor:
                 if page_text:
                     text_parts.append(page_text)
             doc.close()
-            return "\n".join(text_parts), num_pages
+            text = "\n".join(text_parts)
+            text_parts.clear()
+            return text, num_pages
         except Exception as e:
-            logger.warning(f"Eroare PyMuPDF: {e}")
+            logger.warning(f"PyMuPDF error: {e}")
             return "", 0
-    
+
     def _extract_with_ocr(self, pdf_path: str) -> str:
-        text_parts = []
+        text_parts: list[str] = []
         try:
             doc = fitz.open(pdf_path)
             for page_num in range(min(len(doc), 20)):
@@ -585,22 +617,38 @@ class PDFTextExtractor:
                 if text:
                     text_parts.append(text)
             doc.close()
-            return "\n".join(text_parts)
+            text = "\n".join(text_parts)
+            text_parts.clear()
+            return text
         except Exception as e:
-            logger.warning(f"Eroare OCR: {e}")
-            return ""
+            logger.warning(f"OCR via PyMuPDF failed ({e}); trying pdfplumber rendering")
+            text_parts.clear()
+            try:
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page in pdf.pages[:20]:
+                        img = page.to_image(resolution=200).original
+                        page_text = pytesseract.image_to_string(img)
+                        if page_text:
+                            text_parts.append(page_text)
+                        page.flush_cache()
+                text = "\n".join(text_parts)
+                text_parts.clear()
+                return text
+            except Exception as e2:
+                logger.warning(f"OCR error (both backends failed): {e2}")
+                return ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONTEXT EXTRACTOR v6.0.1 - SENTENCES + AI MARKERS
+# CONTEXT EXTRACTOR - SENTENCES + AI MARKERS
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ContextExtractor:
     """
-    Extractor context v6.0.1
-    - Extrage N propoziții înainte și după termenul AI
-    - Marchează termenul cu >>>termen<<< pentru highlighting în Excel
-    - Elimină boilerplate
+    Context extractor
+    - Extracts N sentences before and after the AI term
+    - Marks the term with >>>term<<< for highlighting in Excel
+    - Strips boilerplate
     """
     
     HIGHLIGHT_START = '>>>'
@@ -625,50 +673,57 @@ class ContextExtractor:
         self.sentences_after = getattr(config, 'context_sentences_after', 2)
     
     def extract_context_with_sentences(self, text: str, match_start: int, match_end: int,
-                                       highlight: bool = True) -> Tuple[str, str]:
+                                       highlight: bool = True) -> tuple[str, str]:
         """
-        Extrage context bazat pe propoziții și marchează termenul AI.
+        Extract sentence-based context and mark the AI term.
         Returns: (context_with_markers, ai_term)
         """
         ai_term = text[match_start:match_end]
-        
-        # Fereastră mare pentru găsirea propozițiilor
+
+        # Large window for locating sentences
         window_start = max(0, match_start - 2000)
         window_end = min(len(text), match_end + 2000)
         window_text = text[window_start:window_end]
-        
+
         relative_match_start = match_start - window_start
-        
-        # Split în propoziții
+
+        # Split into sentences
         sentences = self.SENTENCE_SPLIT_PATTERN.split(window_text)
-        
-        # Găsește propoziția care conține termenul
+
+        # Find the sentence that contains the term
         current_pos = 0
         target_sentence_idx = 0
-        
+
         for idx, sentence in enumerate(sentences):
             sentence_end = current_pos + len(sentence)
             if current_pos <= relative_match_start < sentence_end:
                 target_sentence_idx = idx
                 break
             current_pos = sentence_end + 1
-        
-        # Extrage propozițiile din jur
+
+        # Extract surrounding sentences
         start_idx = max(0, target_sentence_idx - self.sentences_before)
         end_idx = min(len(sentences), target_sentence_idx + self.sentences_after + 1)
-        
+
         context_sentences = sentences[start_idx:end_idx]
         context = ' '.join(context_sentences)
-        
-        # Curăță
+
+        # Clean
         context = self._clean_boilerplate(context)
         if self.text_cleaner:
             context = self.text_cleaner.clean_text(context)
         context = re.sub(r'\s+', ' ', context).strip()
-        
-        # Marchează termenul AI
+
+        # Mark the AI term
         if highlight and ai_term:
-            term_pattern = re.compile(re.escape(ai_term), re.IGNORECASE)
+            # Boundary-aware: do NOT match the term as a substring inside a
+            # larger word (e.g. "AI" inside "tailored"/"available"/"contain").
+            # Alnum lookarounds instead of \b so multi-word ("machine
+            # learning") and hyphenated ("AI-powered") terms still match.
+            term_pattern = re.compile(
+                r'(?<![A-Za-z0-9])' + re.escape(ai_term) + r'(?![A-Za-z0-9])',
+                re.IGNORECASE,
+            )
             term_match = term_pattern.search(context)
             if term_match:
                 context = (
@@ -676,16 +731,16 @@ class ContextExtractor:
                     self.HIGHLIGHT_START + term_match.group() + self.HIGHLIGHT_END +
                     context[term_match.end():]
                 )
-        
-        # Limită lungime
+
+        # Length limit
         max_length = getattr(self.config, 'max_context_length', 800)
         if len(context) > max_length:
             context = context[:max_length] + '...'
-        
+
         return context, ai_term
-    
+
     def extract_relevant_context(self, text: str, match_start: int, match_end: int) -> str:
-        """Compatibilitate - returnează doar contextul."""
+        """Compatibility helper - returns only the context."""
         context, _ = self.extract_context_with_sentences(text, match_start, match_end, highlight=True)
         return context
     
@@ -696,20 +751,20 @@ class ContextExtractor:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CATEGORY CLASSIFIER v6.1 - CU FALLBACK RULES
+# CATEGORY CLASSIFIER - CLASSIC TAXONOMY + FALLBACK RULES
 # ═══════════════════════════════════════════════════════════════════════════
 
 class CategoryClassifier:
     """
-    Clasificator categorii v6.1 cu:
-    - Pattern matching primar (din AI_CATEGORIES)
-    - Keyword matching secundar  
-    - Fallback rules pentru reducerea Unclassified de la 44% la ~15%
+    Classic-taxonomy classifier with:
+    - Primary pattern matching (from AI_CATEGORIES)
+    - Secondary keyword matching (keyword tier-based confidence)
+    - Fallback rules to keep the Unclassified rate low
     """
-    
-    # Reguli fallback - folosite când pattern/keyword matching eșuează
+
+    # Fallback rules - used when pattern/keyword matching fails
     FALLBACK_RULES = [
-        # Generative AI & LLMs - PRIORITATE MAXIMĂ (termeni specifici)
+        # Generative AI & LLMs - HIGHEST PRIORITY (specific terms)
         (r'(?:generative|GenAI|LLM|GPT|ChatGPT|Copilot|Claude|Gemini|Llama|'
          r'foundation\s+model|large\s+language|transformer|multimodal|'
          r'text[\s-]to[\s-]|DALL[\s-]?E|Midjourney|prompt\s+engineer)', 
@@ -786,88 +841,132 @@ class CategoryClassifier:
          'AI Coding & Development'),
     ]
     
+    # Accept an axis match only when normalized confidence clears this floor.
+    AXIS_THRESHOLD = 0.25
+
     def __init__(self):
-        # Compile patterns din AI_CATEGORIES
-        self.compiled_patterns = {}
-        for category, data in AI_CATEGORIES.items():
-            self.compiled_patterns[category] = {
-                'keywords': [kw.lower() for kw in data['keywords']],
+        # Compile each axis SEPARATELY so a reference can be classified
+        # independently on Applications (A) and Technologies (B). Keywords are
+        # wrapped in \b...\b so short tokens like "ai", "BI", "IPA" don't
+        # substring-match inside unrelated words ("sustainable", "abilities").
+        self.compiled_apps = self._compile_axis(AI_APPLICATIONS)
+        self.compiled_techs = self._compile_axis(AI_TECHNOLOGIES)
+
+        logger.info(
+            f"Category classifier (dual-axis): {len(AI_APPLICATIONS)} application "
+            f"+ {len(AI_TECHNOLOGIES)} technology categories"
+        )
+
+    @staticmethod
+    def _compile_axis(taxonomy: dict[str, dict]) -> dict[str, dict]:
+        compiled = {}
+        for category, data in taxonomy.items():
+            compiled[category] = {
+                'keyword_patterns': [
+                    re.compile(r'\b' + re.escape(kw.lower()) + r'\b')
+                    for kw in data['keywords']
+                ],
                 'patterns': [re.compile(p, re.IGNORECASE) for p in data.get('patterns', [])]
             }
-        
-        # Compile fallback rules
-        self.compiled_fallback = [
-            (re.compile(pattern, re.IGNORECASE), category)
-            for pattern, category in self.FALLBACK_RULES
-        ]
-        
-        logger.info(f"Category classifier v6.1: {len(AI_CATEGORIES)} categorii + {len(self.FALLBACK_RULES)} fallback rules")
-    
-    def classify_with_confidence(self, text: str, context: str) -> Tuple[str, float]:
+        return compiled
+
+    def _score_axis(self, combined: str, compiled: dict[str, dict]) -> tuple[str, float]:
+        """Score one taxonomy axis and return its best (category, confidence).
+
+        Pattern matches score 0.5 each (most specific), keyword matches 0.2
+        each; the winning raw score is normalized by /1.5 and capped at 1.0.
+        Returns ('none', 0.0) when no category clears AXIS_THRESHOLD — there is
+        NO fallback, so an axis may legitimately be 'none'.
         """
-        Clasifică cu confidence score.
-        
-        Logica:
-        1. Pattern matching din AI_CATEGORIES (confidence ridicată)
-        2. Keyword matching (confidence medie)
-        3. Fallback rules (confidence scăzută dar acceptabilă)
-        
-        Returns: (category, confidence_score 0.0-1.0)
-        """
-        combined = f"{text} {context}".lower()
         scores = {}
-        
-        # ═══════════════════════════════════════════════════════════════
-        # PASUL 1: Pattern + Keyword matching din AI_CATEGORIES
-        # ═══════════════════════════════════════════════════════════════
-        for category, data in self.compiled_patterns.items():
+        for category, data in compiled.items():
             score = 0.0
-            
-            # Pattern matches = 0.5 puncte fiecare (cel mai specific)
-            pattern_matches = sum(1 for p in data['patterns'] if p.search(combined))
-            score += pattern_matches * 0.5
-            
-            # Keyword matches = 0.2 puncte fiecare
-            keyword_matches = sum(1 for kw in data['keywords'] if kw in combined)
-            score += keyword_matches * 0.2
-            
+            score += sum(1 for p in data['patterns'] if p.search(combined)) * 0.5
+            score += sum(1 for p in data['keyword_patterns'] if p.search(combined)) * 0.2
             if score > 0:
                 scores[category] = score
-        
-        # Dacă avem match bun din AI_CATEGORIES, returnează
+
         if scores:
             best_category = max(scores, key=scores.get)
-            max_score = scores[best_category]
-            confidence = min(1.0, max_score / 1.5)  # Normalizare
-            
-            if confidence >= 0.25:  # Threshold scăzut pentru a permite mai multe clasificări
+            confidence = min(1.0, scores[best_category] / 1.5)
+            if confidence >= self.AXIS_THRESHOLD:
                 return best_category, confidence
-        
-        # ═══════════════════════════════════════════════════════════════
-        # PASUL 2: Fallback rules (dacă AI_CATEGORIES nu a dat rezultate)
-        # ═══════════════════════════════════════════════════════════════
-        for pattern, category in self.compiled_fallback:
-            if pattern.search(combined):
-                return category, 0.35  # Confidence medie pentru fallback
-        
-        # ═══════════════════════════════════════════════════════════════
-        # PASUL 3: Nicio potrivire - încearcă clasificare bazată pe text
-        # ═══════════════════════════════════════════════════════════════
-        # Pentru cazuri cu termeni generici, clasifică în Data & Analytics
-        generic_ai_terms = ['ai', 'ml', 'artificial intelligence', 'machine learning']
-        if any(term in combined for term in generic_ai_terms):
-            return 'Data & Analytics', 0.2  # Default pentru termeni generici
-        
-        return 'Unclassified', 0.0
+
+        return 'none', 0.0
+
+    def classify_dual(self, text: str, context: str) -> tuple[str, float, str, float]:
+        """Classify a reference independently on both classic axes.
+
+        Returns: (category_a, conf_a, category_b, conf_b). Each axis is the
+        best-scoring category for that taxonomy, or 'none' if nothing matched.
+        A reference can therefore land in an A-category, a B-category, both, or
+        neither — the EU_Semantics axis (classified in parallel) captures
+        references that match neither A nor B.
+        """
+        combined = f"{text} {context}".lower()
+        category_a, conf_a = self._score_axis(combined, self.compiled_apps)
+        category_b, conf_b = self._score_axis(combined, self.compiled_techs)
+        return category_a, conf_a, category_b, conf_b
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# FALSE POSITIVE FILTER v6.1 - CU VALIDARE TEXT SCURT ȘI ENCODING
+# EU_SEMANTICS CLASSIFIER (JRC AI Watch) — parallel to CategoryClassifier
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Importă AI_CONTEXT_VALIDATORS din module1
+class EUCategoryClassifier:
+    """Classify a detected AI reference under the EU_SEMANTICS taxonomy
+    (European Commission JRC "AI Watch").
+
+    Runs in PARALLEL with the classic CategoryClassifier on the SAME detected
+    references (no extra PDF processing). Returns (domain, subdomain, confidence).
+    References with no EU keyword/pattern match → ('Unclassified', 'Unclassified', 0.0).
+    """
+
+    def __init__(self):
+        # Compile keyword + pattern matchers per EU leaf. Keywords use \b…\b so
+        # short tokens don't substring-match inside unrelated words.
+        self.compiled: dict[str, dict] = {}
+        for leaf_code, data in EU_CATEGORIES.items():
+            self.compiled[leaf_code] = {
+                'domain': data['domain'],
+                'subdomain': data['subdomain'],
+                'keyword_patterns': [
+                    re.compile(r'\b' + re.escape(kw.lower()) + r'\b')
+                    for kw in data['keywords']
+                ],
+                'patterns': [
+                    re.compile(p, re.IGNORECASE) for p in data.get('patterns', [])
+                ],
+            }
+        logger.info(f"EU classifier: {len(EU_CATEGORIES)} EU_Semantics leaves (JRC AI Watch)")
+
+    def classify_with_confidence(self, text: str, context: str) -> tuple[str, str, float]:
+        """Return (eu_domain, eu_subdomain, confidence 0.0-1.0) for a reference."""
+        combined = f"{text} {context}".lower()
+        scores: dict[str, float] = {}
+        for leaf_code, data in self.compiled.items():
+            score = 0.0
+            score += sum(1 for p in data['patterns'] if p.search(combined)) * 0.5
+            score += sum(1 for p in data['keyword_patterns'] if p.search(combined)) * 0.2
+            if score > 0:
+                scores[leaf_code] = score
+
+        if not scores:
+            return 'Unclassified', 'Unclassified', 0.0
+
+        best = max(scores, key=scores.get)
+        confidence = min(1.0, scores[best] / 1.5)
+        info = self.compiled[best]
+        return info['domain'], info['subdomain'], confidence
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FALSE POSITIVE FILTER - VALIDATION & ENCODING CHECK
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Import AI_CONTEXT_VALIDATORS from core
 try:
-    from ai_analyzer_v6_1_module1 import AI_CONTEXT_VALIDATORS
+    from _02_core import AI_CONTEXT_VALIDATORS
 except ImportError:
     AI_CONTEXT_VALIDATORS = [
         'artificial intelligence', 'machine learning', 'deep learning',
@@ -879,101 +978,165 @@ except ImportError:
 
 class FalsePositiveFilter:
     """
-    Filtru false pozitive v6.1 cu:
-    - Pattern matching extins
-    - Validare text corupt/encoding
-    - Validare context pentru texte scurte (AI, ML, DL)
+    False positive filter with:
+    - Pattern matching (~60 patterns)
+    - ML/DL measurement unit detection
+    - Corrupted text / encoding validation
+    - Context validation for short texts (AI, ML, DL)
     """
-    
+
     def __init__(self):
         self.compiled_patterns = [re.compile(p, re.IGNORECASE) for p in FALSE_POSITIVE_PATTERNS]
         self.context_validators = [v.lower() for v in AI_CONTEXT_VALIDATORS]
-        logger.info(f"False positive filter v6.1: {len(FALSE_POSITIVE_PATTERNS)} patterns")
-    
+        logger.info(f"False positive filter: {len(FALSE_POSITIVE_PATTERNS)} patterns")
+
     def is_false_positive(self, text: str, context: str) -> bool:
         """
-        Verifică dacă referința e false pozitiv.
-        
-        Returns True dacă:
-        - Match-uiește un pattern false pozitiv
-        - Textul e corupt (encoding issues)
-        - Text scurt fără context AI valid
+        Check whether the reference is a false positive.
+
+        Returns True if:
+        - It matches a false positive pattern
+        - The text is corrupted (encoding issues)
+        - Short text without a valid AI context
         """
-        # 1. Verifică text/context corupt
+        # 1. Check for corrupted text/context
         if self._is_corrupted_text(context):
             return True
-        
-        # 2. Verifică pattern-uri false pozitive
+
+        # 2. Check false positive patterns
         combined = f"{text} {context}"
         for pattern in self.compiled_patterns:
             if pattern.search(combined):
                 return True
-        
-        # 3. Pentru texte scurte (AI, ML, DL), verifică context
+
+        # 3. For short texts (AI, ML, DL), validate context
         if len(text) <= 3 and not self._has_valid_ai_context(context):
             return True
-        
+
         return False
-    
+
     def _is_corrupted_text(self, text: str) -> bool:
-        """Detectează text corupt din encoding issues."""
+        """Detect corrupted text from encoding issues."""
         if not text or len(text) < 20:
             return False
-        
-        # Prea multe caractere speciale (>10%)
+
+        # Too many special characters (>10%)
         special_count = len(re.findall(r'[#$%&*@^\\|~`]', text))
         if special_count / len(text) > 0.1:
             return True
-        
-        # Prea puține spații pentru lungimea textului (text lipit)
+
+        # Too few spaces for the text length (run-on text)
         space_count = text.count(' ')
         if len(text) > 100 and space_count / len(text) < 0.05:
             return True
-        
-        # Secvențe lungi fără vocale (imposibil în engleză)
+
+        # Long sequences without vowels (impossible in English)
         if re.search(r'[bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ]{8,}', text):
             return True
-        
+
         return False
-    
+
     def _has_valid_ai_context(self, context: str) -> bool:
-        """Verifică dacă contextul confirmă că e vorba de AI real."""
+        """Check whether the context confirms it is a genuine AI reference."""
         if not context:
             return False
-        
+
         context_lower = context.lower()
-        
-        # Verifică dacă contextul conține termeni AI reali
+
+        # Check whether the context contains real AI terms
         for validator in self.context_validators:
             if validator in context_lower:
                 return True
-        
+
         return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# AI REFERENCE DETECTOR v6.0.1
+# AI REFERENCE DETECTOR
 # ═══════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NEGATION FILTER
+# ═══════════════════════════════════════════════════════════════════════════
+# Two-tier filter applied AFTER pattern + semantic detection, BEFORE references
+# are returned to the pipeline.
+#
+#   HARD_NEGATION  → drop the reference entirely (unambiguous "we do not use AI")
+#   SOFT_NEGATION  → keep, but mark is_negated_context=True, force strength to
+#                    'mention_only', multiply confidence by 0.4. Captures
+#                    risk-factor / hypothetical / disclaimer language.
+
+class NegationFilter:
+    """Context-window negation detector. See module-level note above."""
+
+    # Hard negation: company DENIES adoption / DISCLAIMS use.
+    # Drop the reference — it is not evidence of AI adoption.
+    HARD_NEGATION_PATTERNS = [
+        r'\b(?:do(?:es)?|did)\s+not\s+(?:currently\s+)?(?:use|deploy|leverage|employ|utilize|rely\s+on|operate)\b.{0,40}\b(?:AI|ML|GenAI|artificial\s+intelligence|machine\s+learning)\b',
+        r'\b(?:AI|ML|GenAI|artificial\s+intelligence|machine\s+learning)\b.{0,40}\b(?:is|are)\s+not\s+(?:currently\s+)?(?:used|deployed|employed|leveraged|integrated)\b',
+        r'\b(?:no|not)\s+(?:current\s+)?(?:plans?|intent(?:ion)?|strateg(?:y|ic)\s+(?:plan)?)\s+to\s+(?:deploy|implement|use|adopt|integrate)\b.{0,40}\b(?:AI|ML|GenAI|artificial\s+intelligence)\b',
+        r'\bnone\s+of\s+(?:our|the)\s+(?:products|services|operations|systems|business(?:es)?)\b.{0,40}\b(?:use|leverage|rely|employ)\b.{0,40}\b(?:AI|ML|GenAI)\b',
+        r'\b(?:absent|without|lacking)\s+(?:any\s+)?(?:AI|ML|machine\s+learning)\b',
+        r'\b(?:AI|ML|GenAI)\b.{0,30}\bnot\s+(?:material|significant|core|substantial|a\s+significant)\b',
+    ]
+
+    # Soft negation: hypothetical / risk-factor / disclaimer language.
+    # Keep the reference (it IS a mention) but down-weight it heavily — these
+    # are obligatory regulatory disclosures, not evidence of operational use.
+    SOFT_NEGATION_PATTERNS = [
+        r'\b(?:AI|ML|GenAI|artificial\s+intelligence|machine\s+learning)\b.{0,60}\b(?:may|could|might|can|would)\s+(?:pose|create|introduce|present|cause|result\s+in|lead\s+to)\b.{0,40}\b(?:risks?|harms?|threats?|concerns?|liabilit(?:y|ies)|exposures?|losses|damages?|adverse|negative)\b',
+        r'\b(?:risks?|threats?|harms?|concerns?|liabilit(?:y|ies))\s+(?:associated|related|linked)\s+(?:with|to)\b.{0,40}\b(?:AI|ML|GenAI|artificial\s+intelligence|machine\s+learning)\b',
+        r'\bcannot\s+(?:guarantee|ensure|assure|predict)\b.{0,60}\b(?:AI|ML|GenAI|artificial\s+intelligence|machine\s+learning)\b',
+        r'\b(?:if|should|in\s+the\s+event\s+that)\s+(?:AI|ML|GenAI|artificial\s+intelligence|our\s+AI)\b.{0,40}\b(?:fail|malfunction|err|breach|violate|expose)',
+        r'\b(?:hypothetical(?:ly)?|potential(?:ly)?)\b.{0,30}\b(?:AI|ML|GenAI|artificial\s+intelligence)\b',
+        r'\b(?:AI|ML|GenAI)\b.{0,30}\b(?:will|may)\s+not\s+(?:be|become|prove)\b',
+        r'\b(?:regulator(?:y|s)|legal|compliance)\s+(?:uncertaint(?:y|ies)|risk(?:s)?)\b.{0,40}\b(?:AI|ML|GenAI|artificial\s+intelligence)\b',
+        r'\b(?:AI|ML|GenAI|artificial\s+intelligence)\b.{0,40}\b(?:regulator(?:y|s)|legal|compliance)\s+(?:uncertaint(?:y|ies)|risk(?:s)?|exposure)\b',
+        r'\bbias(?:ed|es)?\s+(?:in|of|within)\s+(?:AI|ML|GenAI|our\s+models?|algorithms?)\b',
+    ]
+
+    SOFT_NEGATION_CONFIDENCE_FACTOR = 0.4
+
+    def __init__(self) -> None:
+        self.compiled_hard = [re.compile(p, re.IGNORECASE) for p in self.HARD_NEGATION_PATTERNS]
+        self.compiled_soft = [re.compile(p, re.IGNORECASE) for p in self.SOFT_NEGATION_PATTERNS]
+        logger.info(
+            f"Negation filter: hard={len(self.HARD_NEGATION_PATTERNS)}, soft={len(self.SOFT_NEGATION_PATTERNS)}"
+        )
+
+    def classify(self, context: str) -> str:
+        """Return 'hard', 'soft', or 'none'."""
+        if not context:
+            return "none"
+        for p in self.compiled_hard:
+            if p.search(context):
+                return "hard"
+        for p in self.compiled_soft:
+            if p.search(context):
+                return "soft"
+        return "none"
+
 
 class AIReferenceDetector:
     """
-    Detector referințe AI v6.1 (refactor anti-false-positive):
-      - Separă triggers HARD vs SOFT (buzzword gating)
-      - Rulează validatori pe context (actionability / specificity / marketing-only)
-      - Calculează confidence_score și etichetează referințele slabe ca mention_only (FP candidates)
+    AI reference detector (dual taxonomy + FP filtering):
+      - Vendor-specific detection
+      - Separates HARD vs SOFT triggers (buzzword gating)
+      - Runs context validators (actionability / specificity / marketing-only)
+      - Computes confidence_score and flags weak references as mention_only (FP candidates)
+      - Applies NegationFilter post-detection (drop hard / down-weight soft)
 
-    IMPORTANT: Pentru a păstra compatibilitatea cu restul softului (Module 1/3/4),
-    strength/confidence sunt înregistrate în detection_method sub formă de metadate.
-    (La cererea ta, vom actualiza ulterior și celelalte module ca să aibă câmpuri dedicate.)
+    NOTE: To keep compatibility with the rest of the codebase (core / analysis / export),
+    strength/confidence are also encoded inside detection_method as metadata.
     """
 
-    # Prag strict pentru semantic-only (fără HARD + fără semnal de implementare)
+    # Strict threshold for semantic-only hits (no HARD trigger, no implementation signal)
     DEFAULT_SEMANTIC_STRICT_THRESHOLD = 0.68
 
     # ────────────────────────────────────────────────────────────────────
     # HARD vs SOFT triggers
     # ────────────────────────────────────────────────────────────────────
-    # HARD: indicatori tehnici / specifici (AI “real”)
+    # HARD: technical / specific indicators ("real" AI)
     AI_HARD_PATTERNS = [
         # LLM / GenAI / modele
         r'\bgenerative AI\b', r'\bGenAI\b',
@@ -1005,7 +1168,7 @@ class AIReferenceDetector:
         r'\bfunction\s+calling\b', r'\btool\s+(?:use|calling)\b',
     ]
 
-    # SOFT: termeni vagi / marketing / “AI-washing”
+    # SOFT: vague / marketing / "AI-washing" terms
     AI_SOFT_PATTERNS = [
         r'\bartificial intelligence\b',
         r'\bmachine learning\b', r'\bdeep learning\b',
@@ -1028,7 +1191,7 @@ class AIReferenceDetector:
         r'\bintelligent\b', r'\bautomation\b'
     ]
 
-    # Semnale pentru validatori
+    # Validator signals
     IMPLEMENTATION_VERBS = [
         r'\bdeploy(?:ed|ing)?\b', r'\bimplement(?:ed|ing)?\b', r'\bintegrat(?:e|ed|ing)\b',
         r'\broll[\s-]?out\b', r'\blaunch(?:ed|ing)?\b', r'\bbuild(?:ing)?\b',
@@ -1059,7 +1222,14 @@ class AIReferenceDetector:
         self.model = self.semantic_loader.model
         self.context_extractor = ContextExtractor(config)
         self.category_classifier = CategoryClassifier()
+        self.eu_classifier = EUCategoryClassifier()
         self.fp_filter = FalsePositiveFilter()
+        self.negation_filter = NegationFilter()
+
+        # Integrity counter: references unclassified on ALL THREE axes
+        # (A, B, EU). Expected ~0 — a detected AI reference should be captured
+        # by at least one taxonomy axis. Surfaced in run stats.
+        self.tri_axis_unclassified = 0
 
         # compile patterns
         self.compiled_hard = [re.compile(p, re.IGNORECASE) for p in self.AI_HARD_PATTERNS]
@@ -1069,11 +1239,23 @@ class AIReferenceDetector:
         self.compiled_marketing = [re.compile(p, re.IGNORECASE) for p in self.MARKETING_ONLY_CUES]
 
         logger.info(
-            f"AI Reference Detector v6.1: hard={len(self.AI_HARD_PATTERNS)}, soft={len(self.AI_SOFT_PATTERNS)}"
+            f"AI Reference Detector (dual taxonomy): hard={len(self.AI_HARD_PATTERNS)}, soft={len(self.AI_SOFT_PATTERNS)}"
+        )
+
+    @staticmethod
+    def _is_tri_axis_unclassified(ref: AIReference) -> bool:
+        """True when a reference is unclassified on all three axes (A, B, EU).
+
+        Per the taxonomy design a detected AI reference must be captured by at
+        least one axis; 'none' on A and B is only valid when EU classified it.
+        """
+        return (
+            ref.category_a == 'none' and ref.category_b == 'none'
+            and (not ref.eu_subdomain or ref.eu_subdomain == 'Unclassified')
         )
 
     # ────────────────────────────────────────────────────────────────────
-    # Public API (compatibil)
+    # Public API
     # ────────────────────────────────────────────────────────────────────
     def detect_references(
         self,
@@ -1086,8 +1268,8 @@ class AIReferenceDetector:
         country: str,
         doc_type: str,
         source: str
-    ) -> List[AIReference]:
-        references: List[AIReference] = []
+    ) -> list[AIReference]:
+        references: list[AIReference] = []
 
         pattern_refs = self._detect_by_patterns(
             text, company, year, position, industry, sector, country, doc_type, source
@@ -1099,10 +1281,49 @@ class AIReferenceDetector:
         )
         references.extend(semantic_refs)
 
+        # Post-detection negation filter. Hard negations are dropped;
+        # soft (risk/hypothetical) negations are kept but down-weighted so
+        # they no longer inflate the adoption index.
+        filtered: list[AIReference] = []
+        n_hard_drop = 0
+        n_soft_downgrade = 0
+        for ref in references:
+            verdict = self.negation_filter.classify(ref.context)
+            if verdict == "hard":
+                n_hard_drop += 1
+                continue
+            if verdict == "soft":
+                ref.is_negated_context = True
+                ref.confidence_score = round(
+                    ref.confidence_score * NegationFilter.SOFT_NEGATION_CONFIDENCE_FACTOR, 3
+                )
+                ref.reference_strength = "mention_only"
+                ref.confidence_reasons = (
+                    (ref.confidence_reasons + ";" if ref.confidence_reasons else "")
+                    + "negation_soft"
+                )
+                n_soft_downgrade += 1
+            filtered.append(ref)
+
+        if n_hard_drop or n_soft_downgrade:
+            logger.info(
+                f"Negation filter: dropped {n_hard_drop} hard, downgraded {n_soft_downgrade} soft"
+            )
+
+        # Integrity check: a detected reference should be captured by at least
+        # one taxonomy axis. Count/log any that are 'none' on A, B AND EU.
+        n_tri = sum(1 for ref in filtered if self._is_tri_axis_unclassified(ref))
+        if n_tri:
+            self.tri_axis_unclassified += n_tri
+            logger.warning(
+                f"Integrity: {n_tri} reference(s) unclassified on all three axes "
+                f"(A/B/EU) in this document; running total={self.tri_axis_unclassified}"
+            )
+
         logger.info(
-            f"Detectat {len(references)} referințe ({len(pattern_refs)} pattern, {len(semantic_refs)} semantic)"
+            f"Detected {len(filtered)} references ({len(pattern_refs)} pattern, {len(semantic_refs)} semantic; negation-filtered)"
         )
-        return references
+        return filtered
 
     # ────────────────────────────────────────────────────────────────────
     # Internal helpers
@@ -1117,7 +1338,7 @@ class AIReferenceDetector:
             return True
         return False
 
-    def _feature_counts(self, context: str) -> Dict[str, int]:
+    def _feature_counts(self, context: str) -> dict[str, int]:
         ctx = context or ""
         impl = sum(1 for p in self.compiled_impl if p.search(ctx))
         art = sum(1 for p in self.compiled_artifacts if p.search(ctx))
@@ -1135,12 +1356,12 @@ class AIReferenceDetector:
         semantic_score: float,
         context_clean: str,
         doc_type: str
-    ) -> Tuple[float, str, List[str]]:
+    ) -> tuple[float, str, list[str]]:
         """
-        Returnează: (confidence_score 0..1, strength label, reasons)
+        Returns: (confidence_score in 0..1, strength label, reasons)
         strength: 'strong'|'medium'|'mention_only'
         """
-        reasons: List[str] = []
+        reasons: list[str] = []
         feats = self._feature_counts(context_clean)
 
         has_impl = feats["impl"] > 0
@@ -1194,9 +1415,9 @@ class AIReferenceDetector:
 
         return conf, strength, reasons
 
-    def _format_detection_method(self, base: str, trigger_type: str, strength: str, conf: float, reasons: List[str]) -> str:
-        # Metadate compacte, ușor de pars-at ulterior (Module 3/4)
-        # Exemplu: "pattern|trigger=soft|strength=mention_only|conf=0.48|reasons=soft_trigger,marketing_only_penalty"
+    def _format_detection_method(self, base: str, trigger_type: str, strength: str, conf: float, reasons: list[str]) -> str:
+        # Compact metadata, easy to parse downstream (analysis / export)
+        # Example: "pattern|trigger=soft|strength=mention_only|conf=0.48|reasons=soft_trigger,marketing_only_penalty"
         safe_reasons = ",".join(reasons)[:250]
         return f"{base}|trigger={trigger_type}|strength={strength}|conf={conf:.3f}|reasons={safe_reasons}"
 
@@ -1214,11 +1435,11 @@ class AIReferenceDetector:
         country: str,
         doc_type: str,
         source: str
-    ) -> List[AIReference]:
-        references: List[AIReference] = []
+    ) -> list[AIReference]:
+        references: list[AIReference] = []
         seen_positions = set()
 
-        # căutăm mai întâi HARD, apoi SOFT (ca să evităm dubluri)
+        # Look for HARD triggers first, then SOFT ones (avoids duplicate hits)
         pattern_groups = [("hard", self.compiled_hard), ("soft", self.compiled_soft)]
 
         for trigger_type, compiled_list in pattern_groups:
@@ -1230,17 +1451,17 @@ class AIReferenceDetector:
 
                     matched_text = match.group()
 
-                    # Context CU marcaje
+                    # Context with markers
                     context, ai_term = self.context_extractor.extract_context_with_sentences(
                         text, match.start(), match.end(), highlight=True
                     )
 
-                    # False positive check (fără marcaje)
+                    # False positive check (without markers)
                     context_clean = context.replace('>>>', '').replace('<<<', '')
                     if self.fp_filter.is_false_positive(matched_text, context_clean):
                         continue
 
-                    # Robotics/RPA filters (compatibil)
+                    # Robotics / RPA filters
                     robotics_type = classify_robotics_reference(context_clean)
                     rpa_type = classify_rpa_reference(context_clean)
                     if self.config.filter_traditional_robotics and robotics_type == 'traditional_robotics':
@@ -1248,8 +1469,12 @@ class AIReferenceDetector:
                     if self.config.filter_traditional_rpa and rpa_type == 'traditional_rpa':
                         continue
 
-                    # Category + confidence (compatibil)
-                    category, cat_confidence = self.category_classifier.classify_with_confidence(
+                    # Dual-axis classification (classic taxonomy): A and B independent
+                    category_a, conf_a, category_b, conf_b = self.category_classifier.classify_dual(
+                        matched_text, context_clean
+                    )
+                    # EU_Semantics parallel classification (same reference)
+                    eu_domain, eu_subdomain, eu_conf = self.eu_classifier.classify_with_confidence(
                         matched_text, context_clean
                     )
 
@@ -1261,7 +1486,7 @@ class AIReferenceDetector:
                         doc_type=doc_type
                     )
 
-                    # Dacă e SOFT și iese mention_only, îl păstrăm (FP candidate), nu îl eliminăm
+                    # If SOFT and ends up as mention_only we keep it as a FP candidate
                     detection_method = self._format_detection_method(
                         "pattern", trigger_type, strength, conf, reasons
                     )
@@ -1273,11 +1498,14 @@ class AIReferenceDetector:
                         industry=industry, sector=sector, country=country,
                         doc_type=doc_type,
                         text=ai_term, context=context, page=page,
-                        category=category, detection_method=detection_method,
+                        category_a=category_a, category_b=category_b,
+                        detection_method=detection_method,
                         sentiment='neutral', sentiment_score=0.0,
                         semantic_score=0.0, source=source,
                         robotics_type=robotics_type, rpa_type=rpa_type,
-                        category_confidence=cat_confidence,
+                        category_a_confidence=conf_a, category_b_confidence=conf_b,
+                        eu_domain=eu_domain, eu_subdomain=eu_subdomain,
+                        eu_confidence=eu_conf,
                         reference_strength=strength,
                         confidence_score=conf,
                         confidence_reasons=';'.join(reasons)
@@ -1300,8 +1528,8 @@ class AIReferenceDetector:
         country: str,
         doc_type: str,
         source: str
-    ) -> List[AIReference]:
-        references: List[AIReference] = []
+    ) -> list[AIReference]:
+        references: list[AIReference] = []
 
         paragraphs = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 100]
         if not paragraphs:
@@ -1322,7 +1550,7 @@ class AIReferenceDetector:
             for sim_score, para in zip(max_sims.values, batch):
                 score = float(sim_score.item())
 
-                # Decide prag în funcție de HARD/impl în paragraf
+                # Pick threshold based on HARD/impl signals in the paragraph
                 has_hard = self._has_hard_indicator(para)
                 feats = self._feature_counts(para)
                 has_impl = feats["impl"] > 0
@@ -1331,7 +1559,7 @@ class AIReferenceDetector:
                 if score < chosen_thr:
                     continue
 
-                # FP filter pentru semantic
+                # FP filter for semantic hits
                 if self.fp_filter.is_false_positive("", para):
                     continue
 
@@ -1342,7 +1570,8 @@ class AIReferenceDetector:
                 if self.config.filter_traditional_rpa and rpa_type == 'traditional_rpa':
                     continue
 
-                category, cat_confidence = self.category_classifier.classify_with_confidence("", para)
+                category_a, conf_a, category_b, conf_b = self.category_classifier.classify_dual("", para)
+                eu_domain, eu_subdomain, eu_conf = self.eu_classifier.classify_with_confidence("", para)
 
                 ai_term, context_marked = self._find_and_mark_ai_term(para)
 
@@ -1361,11 +1590,14 @@ class AIReferenceDetector:
                     industry=industry, sector=sector, country=country,
                     doc_type=doc_type,
                     text=ai_term, context=context_marked, page=0,
-                    category=category, detection_method=detection_method,
+                    category_a=category_a, category_b=category_b,
+                    detection_method=detection_method,
                     sentiment='neutral', sentiment_score=0.0,
                     semantic_score=score, source=source,
                     robotics_type=robotics_type, rpa_type=rpa_type,
-                    category_confidence=cat_confidence,
+                    category_a_confidence=conf_a, category_b_confidence=conf_b,
+                    eu_domain=eu_domain, eu_subdomain=eu_subdomain,
+                    eu_confidence=eu_conf,
                     reference_strength=strength,
                     confidence_score=conf,
                     confidence_reasons=';'.join(reasons)
@@ -1374,8 +1606,8 @@ class AIReferenceDetector:
 
         return references
 
-    def _find_and_mark_ai_term(self, paragraph: str) -> Tuple[str, str]:
-        """Găsește termenul AI în paragraf și îl marchează cu >>><<<."""
+    def _find_and_mark_ai_term(self, paragraph: str) -> tuple[str, str]:
+        """Find the AI term in the paragraph and wrap it with >>>...<<<."""
         ai_terms_priority = [
             r'\bgenerative AI\b', r'\bGenAI\b', r'\blarge language model(?:s)?\b',
             r'\bLLM(?:s)?\b', r'\bartificial intelligence\b', r'\bmachine learning\b',
@@ -1403,7 +1635,7 @@ class AIReferenceDetector:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class FilenameParser:
-    """Parser pentru numele fișierelor Fortune 500."""
+    """Parser for company report PDF filenames (company, year, doc type)."""
     
     DOC_TYPE_MAPPING = {
         'annual': 'Annual Report',
@@ -1417,11 +1649,11 @@ class FilenameParser:
         'csr': 'Sustainability',
     }
     
-    def parse_filename(self, filename: str) -> Dict:
+    def parse_filename(self, filename: str) -> dict:
         """
         Parse filename to extract company, year, doc_type, position.
-        
-        Format așteptat: "38. Bank of America - 2024 - annual report.pdf"
+
+        Expected format: "38. Bank of America - 2024 - annual report.pdf"
         """
         result = {
             'company': 'Unknown',
@@ -1436,46 +1668,46 @@ class FilenameParser:
         base = Path(filename).stem
         
         # ═══════════════════════════════════════════════════════════════
-        # PASUL 1: Extrage POZIȚIA (ex: "38." la început)
+        # STEP 1: extract the POSITION (e.g. "38." at the start)
         # ═══════════════════════════════════════════════════════════════
         position_match = re.match(r'^(\d{1,3})\.\s*', base)
         if position_match:
             result['position'] = int(position_match.group(1))
-            # Elimină poziția din string pentru procesare ulterioară
+            # Strip the position from the string for further processing
             base = base[position_match.end():]
-        
+
         # ═══════════════════════════════════════════════════════════════
-        # PASUL 2: Extrage ANUL (ex: "2024")
+        # STEP 2: extract the YEAR (e.g. "2024")
         # ═══════════════════════════════════════════════════════════════
         year_match = re.search(r'(?:^|[\s\-_])20(1[5-9]|2[0-5])(?:[\s\-_]|$)', base)
         if year_match:
             result['year'] = int('20' + year_match.group(1))
-        
+
         # ═══════════════════════════════════════════════════════════════
-        # PASUL 3: Extrage DOC_TYPE
+        # STEP 3: extract the DOC_TYPE
         # ═══════════════════════════════════════════════════════════════
         base_lower = base.lower()
         for key, value in self.DOC_TYPE_MAPPING.items():
             if key in base_lower:
                 result['doc_type'] = value
                 break
-        
+
         # ═══════════════════════════════════════════════════════════════
-        # PASUL 4: Extrage COMPANY NAME
+        # STEP 4: extract the COMPANY NAME
         # Format: "Company Name - Year - doc type"
         # ═══════════════════════════════════════════════════════════════
-        # Split după " - " (cu spații)
+        # Split on " - " (with spaces)
         parts = re.split(r'\s+-\s+', base)
-        
+
         if len(parts) >= 1:
             company_part = parts[0].strip()
-            
-            # Curăță compania de eventuale numere rămase
+
+            # Strip any residual digits from the company name
             company_part = re.sub(r'^\d+\.\s*', '', company_part)
-            
+
             if company_part:
                 result['company'] = company_part
-        
+
         return result
 
 
@@ -1485,12 +1717,12 @@ class FilenameParser:
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("AI SEMANTIC ANALYZER v6.0.5 - MODUL 2: PDF PROCESSING & EXTRACTION")
+    print("AI SEMANTIC ANALYZER - DETECTION MODULE")
     print("=" * 80)
-    print(f"\n✓ Module 2 v6.0 încărcat!")
-    print(f"\nFeatures:")
+    print("\n✓ detection module loaded.")
+    print("\nFeatures:")
     print(f"  - AI patterns: {len(AI_MAIN_PATTERNS)}")
     print(f"  - Canonical descriptions: {len(AI_CANONICAL_DESCRIPTIONS)}")
-    print(f"  - Robotics/RPA classification")
-    print(f"  - Improved context extraction")
-    print(f"  - Category classifier with confidence")
+    print("  - Robotics / RPA classification")
+    print("  - Sentence-aware context extraction")
+    print("  - Category classifier with confidence scoring")
