@@ -1,5 +1,5 @@
 {
-  "input_folder": "[PATH_TO_COMPANIES_PDFS_FOLDER]\\companies_reports",
+  "input_folder": "[PATH_TO_COMPANIES_PDFS_FOLDER]",
   "company_metadata_csv": null,
   "output_folder": "RESULTS",
   "top_n": 3,
